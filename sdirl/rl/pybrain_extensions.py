@@ -19,16 +19,11 @@ class SparseActionValueTable(ActionValueTable):
     """ Sparse version of the ActionValueTable from pybrain, uses less memory.
     """
 
-    def __init__(self, numStates, numActions, random_state, name=None):
+    def __init__(self, numActions, random_state, name=None):
         Module.__init__(self, 1, 1, name)
-        self.n_states = numStates
         self.n_actions = numActions
-        self.paramdim = numStates * numActions
-        self.numRows = numStates
         self.numColumns = numActions
         self.random_state = random_state
-        if self.paramdim == 0:
-            raise ValueError("paramdim must be positive")
         if isinstance(self, Module) or isinstance(self, Connection):
             self.hasDerivatives = True
         if self.hasDerivatives:
@@ -49,13 +44,12 @@ class SparseActionValueTable(ActionValueTable):
         return self.random_state.choice(action)
 
     def check_bounds(self, row=None, column=None):
-        if row is not None and (row < 0 or row >= self.n_states):
+        if row is not None and (row < 0):
             raise ValueError("Row out of bounds (was {})".format(row))
         if column is not None and (column < 0 or column >= self.n_actions):
             raise ValueError("Column out of bounds (was {})".format(column))
 
     def getValue(self, row, column):
-        self.check_bounds(row, column)
         return self.getActionValues(row)[column]
 
     def _init_or_random_val(self):
@@ -155,9 +149,10 @@ class EGreedyExplorer(DiscreteExplorer):
         self.random_state = random_state
         self.epsilon = epsilon
         self.decay = decay
+        self.module = None
 
     def _forwardImplementation(self, inbuf, outbuf):
-        assert self.module
+        assert self.module is not None
 
         if self.random_state.rand() < self.epsilon:
             outbuf[:] = np.array([self.random_state.randint(self.module.numActions)])

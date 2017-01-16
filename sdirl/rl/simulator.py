@@ -3,17 +3,17 @@ import numpy as np
 from pybrain.rl.agents import LearningAgent
 from pybrain.rl.experiments import EpisodicExperiment
 
-from menumodel.pybrain_extensions import SparseActionValueTable, EpisodeQ, EGreedyExplorer
+from sdirl.rl.pybrain_extensions import SparseActionValueTable, EpisodeQ, EGreedyExplorer
 
 import logging
 logger = logging.getLogger(__name__)
 
 """An implementation of the Menu search model used in Kangasraasio et al. CHI 2017 paper.
 
-Generic RL model.
+Generic RL simulator.
 """
 
-class RLModel():
+class RLSimulator():
 
     def __init__(self,
             n_training_episodes,
@@ -47,8 +47,8 @@ class RLModel():
         self.task = task
 
     def __call__(self, *args, random_state=None):
-        """ Simulates data, interface to ELFI.
-        Sequential simulator.
+        """ Simulates data.
+        Interfaces to ELFI as a sequential simulator.
 
         Parameters
         ----------
@@ -81,10 +81,10 @@ class RLModel():
         """ Initialize the model
         """
         self.env.setup(self.variables, random_state)
-        n_states = self.task.env.n_states
+        self.task.setup(self.variables)
         outdim = self.task.env.outdim
         n_actions = self.task.env.numActions
-        self.agent = RL_agent(n_states, outdim, n_actions, random_state)
+        self.agent = RL_agent(outdim, n_actions, random_state)
         logger.debug("Model initialized")
 
     def _train_model(self):
@@ -112,6 +112,7 @@ class RLModel():
         # deactivate exploration
         explorer = self.agent.learner.explorer
         self.agent.learner.explorer = EGreedyExplorer(epsilon=0, decay=1, random_state=random_state)
+        self.agent.learner.explorer.module = self.agent.module
         # activate logging
         self.task.env.log = dict()
 
@@ -133,10 +134,10 @@ class RLModel():
 
 
 class RL_agent(LearningAgent):
-    def __init__(self, n_states, outdim, n_actions, random_state):
+    def __init__(self, outdim, n_actions, random_state):
         """ RL agent
         """
-        module = SparseActionValueTable(n_states, n_actions, random_state)
+        module = SparseActionValueTable(n_actions, random_state)
         module.initialize(0.0)
         learner = EpisodeQ(alpha=0.3, gamma=0.998)
         learner.explorer = EGreedyExplorer(random_state, epsilon=0.1, decay=1.0)

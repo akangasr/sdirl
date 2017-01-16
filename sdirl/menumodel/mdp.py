@@ -1,7 +1,7 @@
 import math
 import numpy as np
 
-from menumodel.utils import vec_state_to_scalar
+from rlmodel.utils import vec_state_to_scalar
 
 from pybrain.rl.environments import Environment, EpisodicTask
 
@@ -125,6 +125,7 @@ class SearchEnvironment(Environment):
         self.random_state = None # set with setup
         self.log = None # set by RL_model
         self.task = None # set by Task
+
         self.menu_type = menu_type
         self.menu_groups = menu_groups
         self.menu_items_per_group = menu_items_per_group

@@ -1,11 +1,13 @@
+
 import json
 import numpy as np
 import GPy
 
+from rlmodel.rlmodel import RLModel
+
 from menumodel.observation import BaillyData
 from menumodel.discrepancy import Discrepancy
-from menumodel.rl_model import SearchTask, SearchEnvironment
-from menumodel.rl_base import RLModel
+from menumodel.mdp import SearchTask, SearchEnvironment
 from menumodel.summary import feature_extraction
 
 import elfi

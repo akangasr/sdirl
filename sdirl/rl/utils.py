@@ -5,10 +5,75 @@ logger = logging.getLogger(__name__)
 
 # pip install https://github.com/pybrain/pybrain/archive/0.3.3.zip
 
-"""An implementation of the Menu search model used in Kangasraasio et al. CHI 2017 paper.
-
-Misc utility functions, mostly related to transformations between state representations.
+""" RL related utility functions and classes
 """
+
+class InitialStateGenerator():
+    n_initial_states = 0  # number of possible initial states
+
+    def __init__(self, grid_size):
+        self.grid_size = grid_size
+
+    def get_random_initial_state_id(self, random_state):
+        """ Returns a random intial state id
+
+        Parameters
+        ----------
+        random_state : np.random.RandomState
+        """
+        if self.n_initial_states <= 0:
+            raise ValueError("Must have at least one possible initial state.")
+        return random_state.randint(self.n_initial_states)
+
+    def get_initial_state(self, id_number):
+        """ Returns an initial state corresponding to id_number
+
+        Parameters
+        ----------
+        id_number : int
+            in [0, n_initial_states)
+        """
+        raise NotImplementedError("Subclass implements")
+
+
+class PathTreeIterator():
+    """ Iterator for a path tree
+
+    Parameters
+    ----------
+    root : Observation
+    paths : dict[observation] = node with nodes being tuples: (state, next observations ...)
+    """
+    def __init__(self, root, paths, maxlen):
+        self.root = root
+        self.paths = paths
+        self.maxlen = maxlen
+
+    def __iter__(self):
+        self.indices = [0] * maxlen
+        self.end = False
+        return self
+
+    def next(self):
+        if self.end is True:
+            raise StopIteration()
+        path = list()
+        node = self.paths[self.root]
+        nvals = list()
+        for i in self.indices:
+            path.append(node[0])  # state is first
+            nvals.append(len(node)-1)  # number of children
+            node = self.paths[node[i]]
+        for i in reversed(range(len(self.indices))):
+            if self.indices[i] < nvals[i]:
+                self.indices[i] += 1
+                break
+            else:
+                self.indices[i] = 0
+        if max(self.indices) == 0:
+            self.end = True
+        return path
+
 
 def is_integer(i):
     """ Returns true if the type of 'i' is some kind of common integer.
