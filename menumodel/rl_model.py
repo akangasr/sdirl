@@ -1,7 +1,7 @@
 import math
 import numpy as np
 
-from rlmodel.utils import vec_state_to_scalar
+from menumodel.utils import vec_state_to_scalar
 
 from pybrain.rl.environments import Environment, EpisodicTask
 

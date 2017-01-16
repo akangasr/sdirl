@@ -3,7 +3,7 @@ import numpy as np
 from pybrain.rl.agents import LearningAgent
 from pybrain.rl.experiments import EpisodicExperiment
 
-from rlmodel.pybrain_extensions import SparseActionValueTable, EpisodeQ, EGreedyExplorer
+from menumodel.pybrain_extensions import SparseActionValueTable, EpisodeQ, EGreedyExplorer
 
 import logging
 logger = logging.getLogger(__name__)

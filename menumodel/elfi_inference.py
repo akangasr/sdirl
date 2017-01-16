@@ -2,11 +2,11 @@ import json
 import numpy as np
 import GPy
 
-from rlmodel.observation import BaillyData
-from rlmodel.discrepancy import Discrepancy
-from rlmodel.rl_model import SearchTask, SearchEnvironment
-from rlmodel.rl_base import RLModel
-from rlmodel.summary import feature_extraction
+from menumodel.observation import BaillyData
+from menumodel.discrepancy import Discrepancy
+from menumodel.rl_model import SearchTask, SearchEnvironment
+from menumodel.rl_base import RLModel
+from menumodel.summary import feature_extraction
 
 import elfi
 from elfi import InferenceTask
@@ -158,9 +158,14 @@ def store_posterior(posterior, filename="out.json"):
         "optimizer": model.optimizer,
         "max_opt_iters": model.max_opt_iters
         }
-    f = open(filename, "w")
-    json.dump(data, f)
-    f.close()
+    if filename is not None:
+       f = open(filename, "w")
+       json.dump(data, f)
+       f.close()
+    else:
+        print("-----POSTERIOR-----")
+        print(json.dumps(data))
+        print("-------------------")
     logger.info("Stored compressed posterior to {}".format(filename))
 
 def load_posterior(filename="out.json"):
