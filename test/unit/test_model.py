@@ -27,12 +27,12 @@ class TestSimpleGaussianModel():
         loc = [[-1.0], [0.0], [1.0]]
         for l in loc:
             obs.append(model.simulate_observations(l, rs))
-        assert model.evaluate_loglikelihood(loc[0], obs[0]) > model.evaluate_loglikelihood(loc[0], obs[1])
-        assert model.evaluate_loglikelihood(loc[0], obs[0]) > model.evaluate_loglikelihood(loc[0], obs[2])
-        assert model.evaluate_loglikelihood(loc[1], obs[1]) > model.evaluate_loglikelihood(loc[1], obs[0])
-        assert model.evaluate_loglikelihood(loc[1], obs[1]) > model.evaluate_loglikelihood(loc[1], obs[2])
-        assert model.evaluate_loglikelihood(loc[2], obs[2]) > model.evaluate_loglikelihood(loc[2], obs[0])
-        assert model.evaluate_loglikelihood(loc[2], obs[2]) > model.evaluate_loglikelihood(loc[2], obs[1])
+        assert model.evaluate_loglikelihood(loc[0], obs[0], rs) > model.evaluate_loglikelihood(loc[0], obs[1], rs)
+        assert model.evaluate_loglikelihood(loc[0], obs[0], rs) > model.evaluate_loglikelihood(loc[0], obs[2], rs)
+        assert model.evaluate_loglikelihood(loc[1], obs[1], rs) > model.evaluate_loglikelihood(loc[1], obs[0], rs)
+        assert model.evaluate_loglikelihood(loc[1], obs[1], rs) > model.evaluate_loglikelihood(loc[1], obs[2], rs)
+        assert model.evaluate_loglikelihood(loc[2], obs[2], rs) > model.evaluate_loglikelihood(loc[2], obs[0], rs)
+        assert model.evaluate_loglikelihood(loc[2], obs[2], rs) > model.evaluate_loglikelihood(loc[2], obs[1], rs)
 
     def test_discrepancy_results_are_sensible(self):
         model = SimpleGaussianModel(["mean"])
@@ -41,11 +41,11 @@ class TestSimpleGaussianModel():
         loc = [[-1.0], [0.0], [1.0]]
         for l in loc:
             obs.append(model.simulate_observations(l, rs))
-        assert model.calculate_discrepancy(loc[0], obs[0]) < model.calculate_discrepancy(loc[0], obs[1])
-        assert model.calculate_discrepancy(loc[0], obs[0]) < model.calculate_discrepancy(loc[0], obs[2])
-        assert model.calculate_discrepancy(loc[1], obs[1]) < model.calculate_discrepancy(loc[1], obs[0])
-        assert model.calculate_discrepancy(loc[1], obs[1]) < model.calculate_discrepancy(loc[1], obs[2])
-        assert model.calculate_discrepancy(loc[2], obs[2]) < model.calculate_discrepancy(loc[2], obs[0])
-        assert model.calculate_discrepancy(loc[2], obs[2]) < model.calculate_discrepancy(loc[2], obs[1])
+        assert model.evaluate_discrepancy(loc[0], obs[0], rs) < model.evaluate_discrepancy(loc[0], obs[1], rs)
+        assert model.evaluate_discrepancy(loc[0], obs[0], rs) < model.evaluate_discrepancy(loc[0], obs[2], rs)
+        assert model.evaluate_discrepancy(loc[1], obs[1], rs) < model.evaluate_discrepancy(loc[1], obs[0], rs)
+        assert model.evaluate_discrepancy(loc[1], obs[1], rs) < model.evaluate_discrepancy(loc[1], obs[2], rs)
+        assert model.evaluate_discrepancy(loc[2], obs[2], rs) < model.evaluate_discrepancy(loc[2], obs[0], rs)
+        assert model.evaluate_discrepancy(loc[2], obs[2], rs) < model.evaluate_discrepancy(loc[2], obs[1], rs)
 
 

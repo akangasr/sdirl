@@ -17,7 +17,7 @@ if __name__ == "__main__":
         n_training_episodes=500000,
         n_episodes_per_epoch=10,
         n_simulation_episodes=1000)
-    ground_truth = [-0.1, -0.1]
+    ground_truth = [-0.1, 0, -0.1, -0.5]
     approximate = True
     n_surrogate_samples = 200
     batch_size = 10

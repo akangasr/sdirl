@@ -1,6 +1,8 @@
 import sys
 import numpy as np
 import random
+import json
+import GPy
 
 import elfi
 from elfi import InferenceTask
@@ -164,8 +166,7 @@ class BOLFIModelWrapper():
         else:
             return val  # we want minimum discrepancy
 
-
-def store_posterior(posterior, filename="out.json"):
+def store_bolfi_posterior(posterior, filename="out.json"):
     # hack
     assert type(posterior) is BolfiPosterior, type(posterior)
     model = posterior.model
@@ -185,17 +186,12 @@ def store_posterior(posterior, filename="out.json"):
         "optimizer": model.optimizer,
         "max_opt_iters": model.max_opt_iters
         }
-    if filename is not None:
-       f = open(filename, "w")
-       json.dump(data, f)
-       f.close()
-    else:
-        print("-----POSTERIOR-----")
-        print(json.dumps(data))
-        print("-------------------")
+    f = open(filename, "w")
+    json.dump(data, f)
+    f.close()
     logger.info("Stored compressed posterior to {}".format(filename))
 
-def load_posterior(filename="out.json"):
+def load_bolfi_posterior(filename="out.json"):
     # hack
     f = open(filename, "r")
     data = json.load(f)
@@ -209,9 +205,12 @@ def load_posterior(filename="out.json"):
     max_opt_iters = data["max_opt_iters"]
     model = GPyModel(input_dim=len(bounds),
                     bounds=bounds,
+                    kernel_class=kernel_class,
+                    kernel_var=kernel_var,
+                    kernel_scale=kernel_scale,
+                    noise_var=noise_var,
                     optimizer=optimizer,
                     max_opt_iters=max_opt_iters)
-    model.set_kernel(kernel_class=kernel_class, kernel_var=kernel_var, kernel_scale=kernel_scale)
     X = np.atleast_2d(data["X_params"])
     Y = np.atleast_2d(data["Y_disc"])
     model._fit_gp(X, Y)
@@ -220,7 +219,6 @@ def load_posterior(filename="out.json"):
     posterior.ML_val = data["ML_val"]
     posterior.MAP = np.atleast_1d(data["MAP"])
     posterior.MAP_val = data["MAP_val"]
+    logger.info("Loaded compressed posterior from {}".format(filename))
     return posterior
-
-
 

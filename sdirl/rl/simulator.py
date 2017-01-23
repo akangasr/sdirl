@@ -21,7 +21,8 @@ class RLSimulator():
             n_simulation_episodes,
             var_names,
             env,
-            task):
+            task,
+            softq=False):
         """
 
         Parameters
@@ -36,8 +37,9 @@ class RLSimulator():
             Names of variables, in order
         env : Environment model
         task : EpisodecTask instance
-        agent : string
-            Agent type as string
+        softq : bool
+            True : uses soft q values for actions
+            False : uses hard q values for actions
         """
         self.n_training_episodes = n_training_episodes
         self.n_episodes_per_epoch = n_episodes_per_epoch
@@ -45,6 +47,13 @@ class RLSimulator():
         self.var_names = var_names
         self.env = env
         self.task = task
+        self.softq = softq
+        self.agent = None
+
+    def train_model(self, *variables, random_state=None):
+        self._set_variables(variables)
+        self._build_model(random_state)
+        self._train_model()
 
     def __call__(self, *args, random_state=None):
         """ Simulates data.
@@ -60,11 +69,14 @@ class RLSimulator():
         -------
         Simulated trajectories as a dict encapsulated in 1D numpy array
         """
-        self._set_variables(args)
-        self._build_model(random_state)
-        self._train_model()
-        log_dict = self._simulate(random_state)
+        self.train_model(*args, random_state)
+        log_dict = self.simulate(random_state)
         return np.atleast_1d([log_dict])
+
+    def get_policy(self):
+        """ Returns the current policy of the agent
+        """
+        return self.agent.get_policy()
 
     def _set_variables(self, args):
         """ Parse variable values
@@ -84,7 +96,7 @@ class RLSimulator():
         self.task.setup(self.variables)
         outdim = self.task.env.outdim
         n_actions = self.task.env.numActions
-        self.agent = RL_agent(outdim, n_actions, random_state)
+        self.agent = RLAgent(outdim, n_actions, random_state, self.softq)
         logger.debug("Model initialized")
 
     def _train_model(self):
@@ -99,7 +111,7 @@ class RLSimulator():
             self.agent.learn()
             self.agent.reset()
 
-    def _simulate(self, random_state):
+    def simulate(self, random_state):
         """ Simulates agent behavior in 'n_sim' episodes.
         """
         logger.debug("Simulating user actions ({} episodes)".format(self.n_simulation_episodes))
@@ -133,13 +145,36 @@ class RLSimulator():
         return dataset
 
 
-class RL_agent(LearningAgent):
-    def __init__(self, outdim, n_actions, random_state):
+class RLAgent(LearningAgent):
+    def __init__(self, outdim, n_actions, random_state, softq=False):
         """ RL agent
         """
-        module = SparseActionValueTable(n_actions, random_state)
+        module = SparseActionValueTable(n_actions, random_state, softq=softq)
         module.initialize(0.0)
         learner = EpisodeQ(alpha=0.3, gamma=0.998)
         learner.explorer = EGreedyExplorer(random_state, epsilon=0.1, decay=1.0)
         LearningAgent.__init__(self, module, learner)
+
+    def get_policy(self):
+        return Policy(self.module)
+
+
+class Policy():
+    """ Encapsulated policy
+    """
+
+    def __init__(self, module):
+        self.module = module
+
+    def __call__(self, state, action):
+        """ Returns p(action | state) accoring to deterministic policy with ties broken arbitrarily
+        """
+        s = state.__hash__()
+        a = int(action)
+        qvalues = self.module.getActionValues(s)
+        maxq = max(qvalues)
+        if qvalues[a] == maxq:
+            n_max = sum([1 if q == maxq else 0 for q in qvalues])
+            return 1.0 / n_max
+        return 0.0
 

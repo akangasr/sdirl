@@ -1,10 +1,10 @@
 import math
 import numpy as np
-from enum import Enum
+from enum import IntEnum
 
 from sdirl.rl.utils import vec_state_to_scalar, InitialStateGenerator
-
-from pybrain.rl.environments import Environment, EpisodicTask
+from sdirl.rl.utils import Transition
+from sdirl.rl.pybrain_extensions import ParametricLoggingEpisodicTask, ParametricLoggingEnvironment
 
 import logging
 logger = logging.getLogger(__name__)
@@ -13,36 +13,6 @@ logger = logging.getLogger(__name__)
 
 Definition of the MDP.
 """
-
-class Observation():
-    def __init__(self, start_state, path_len):
-        self.start_state = path_len
-        self.path_len = path_len
-
-    def __eq__(a, b):
-        return a.__hash__() == b.__hash__()
-
-    def __hash__(self):
-        return (self.state, self.path_len).__hash__()
-
-class Path():
-    def __init__(self, transitions):
-        self.transitions = transitions
-
-    def append(self, transition):
-        self.transitions.append(transition)
-
-    def __len__(self):
-        return len(self.transitions)
-
-    def __repr__(self):
-        ret = list()
-        for t in self.transitions:
-            ret.append("{};".format(t))
-        return "".join(ret)
-
-    def __str__(self):
-        return self.__repr__()
 
 class State():
     def __init__(self, x, y):
@@ -61,66 +31,13 @@ class State():
     def __str__(self):
         return self.__repr__()
 
-class Transition():
-    def __init__(self, state, action):
-        self.state = state
-        self.action = action
 
-    def __eq__(a, b):
-        return a.__hash__() == b.__hash__()
-
-    def __hash__(self):
-        return (self.state.x, self.state.y, self.action).__hash__()
-
-    def __repr__(self):
-        return "{}+{}".format(self.state, self.action)
-
-    def __str__(self):
-        return self.__repr__()
-
-class Action(Enum):
+class Action(IntEnum):
     UP = 0
     DOWN = 1
     LEFT = 2
     RIGHT = 3
 
-class GridWorldTask(EpisodicTask):
-
-    def __init__(self, env, max_number_of_actions_per_session):
-        EpisodicTask.__init__(self, None)
-
-        self.v = None  # set with setup
-        self.goal_value = 1.0
-
-        self.env = env
-        self.env.task = self
-        self.max_number_of_actions_per_session = max_number_of_actions_per_session
-
-    def setup(self, variables):
-        self.v = variables
-
-    def reset(self):
-        self.env.reset()
-
-    def getReward(self):
-        """ Returns the current reward based on the state of the environment
-        """
-        # this function should be deterministic and without side effects
-        features = self.env.get_current_state_features()
-        value = self.v["step_penalty"]
-        value += features[0] * self.goal_value
-        for i in range(1, len(features)):
-            value += features[i] * self.v["feature{}_value".format(i)]
-        return value
-
-    def isFinished(self):
-        """ Returns true when the task is in end state """
-        # this function should be deterministic and without side effects
-        if self.env.n_actions >= self.max_number_of_actions_per_session:
-            return True
-        elif self.env.state == self.env.target_state:
-            return True
-        return False
 
 class InitialStateUniformlyAtEdge(InitialStateGenerator):
     """ Returns a state randomly from the edge of the grid
@@ -153,7 +70,63 @@ class InitialStateUniformlyAtEdge(InitialStateGenerator):
         return State(x, y)
 
 
-class GridWorldEnvironment(Environment):
+class InitialStateUniformlyAnywhere(InitialStateGenerator):
+    """ Returns a state randomly from the grid, except for the center
+    """
+
+    def __init__(self, grid_size):
+        super(InitialStateUniformlyAnywhere, self).__init__(grid_size)
+        self.n_initial_states = self.grid_size ** 2 - 1
+
+    def get_initial_state(self, id_number):
+        if id_number < 0:
+            raise ValueError("Id was {}, expected at least 0"
+                    .format(id_number))
+        if id_number >= self.n_initial_states:
+            raise ValueError("Id was {}, expected less than {}"
+                    .format(id_number, self.n_initial_states))
+        x = id_number % self.grid_size
+        y = int(id_number / self.grid_size)
+        if x == int(self.grid_size/2) and y == int(self.grid_size/2):
+            x = self.grid_size - 1
+            y = self.grid_size - 1
+        return State(x, y)
+
+
+class GridWorldTask(ParametricLoggingEpisodicTask):
+
+    def __init__(self, env, max_number_of_actions_per_session):
+        super(GridWorldTask, self).__init__(env)
+
+        self.goal_value = 1.0
+        self.env.task = self
+        self.max_number_of_actions_per_session = max_number_of_actions_per_session
+
+    def setup(self, variables):
+        self.v = variables
+
+    def getReward(self):
+        """ Returns the current reward based on the state of the environment
+        """
+        # this function should be deterministic and without side effects
+        features = self.env.get_current_state_features()
+        value = self.v["step_penalty"]
+        value += features[0] * self.goal_value
+        for i in range(1, len(features)):
+            value += features[i] * self.v["feature{}_value".format(i)]
+        return value
+
+    def isFinished(self):
+        """ Returns true when the task is in end state """
+        # this function should be deterministic and without side effects
+        if self.env.n_actions >= self.max_number_of_actions_per_session:
+            return True
+        elif self.env.state == self.env.target_state:
+            return True
+        return False
+
+
+class GridWorldEnvironment(ParametricLoggingEnvironment):
     """ Grid environment
 
     Parameters
@@ -176,8 +149,7 @@ class GridWorldEnvironment(Environment):
             target_state=None,
             initial_state_generator=None
             ):
-        self.random_state = None # set with setup
-        self.log = None # set by RL_model
+        super(GridWorldEnvironment, self).__init__()
         self.task = None # set by Task
 
         assert grid_size > 0, grid_size
@@ -199,13 +171,6 @@ class GridWorldEnvironment(Environment):
         self.indim = 1
         self.discreteActions = True
         self.numActions = len(self.actions)
-
-    def setup(self, variables, random_state):
-        """ Finishes the initialization
-        """
-        self.v = variables
-        self.random_state = random_state
-        self.reset()
 
     def _generate_grid(self):
         """ Returns the grid
@@ -238,67 +203,38 @@ class GridWorldEnvironment(Environment):
         self.n_actions = 0
         self._start_log_for_new_session()
 
-    def _start_log_for_new_session(self):
-        """ Set up log when new session starts
-        """
-        if self.log != None:
-            if "session" not in self.log:
-                self.log["session"] = 0
-                self.log["sessions"] = [dict()]
-            else:
-                self.log["session"] += 1
-                self.log["sessions"].append(dict())
-            self.step_data = self.log["sessions"][self.log["session"]]
-            self.step_data["grid"] = self.grid
-            self.step_data["start"] = self.start_loc_id
-            self.step_data["path"] = Path([])
-            self.step_data["rewards"] = list()
-
-    def old_print_state(self):
-        s = list()
-        s.append("step %d: " % (self.n_actions))
-        if self.lastact < 0:
-            s.append("initial state")
-        else:
-            s.append("last action: %s, " % (self.actnames[self.lastact]))
-            s.append("moved: %s" % (self.actnames[self.lastmove]))
-        s.append("\n")
-        for x in range(self.grid_size):
-            for y in range(self.grid_size):
-                if self.location_x == x and self.location_y == y:
-                    s.append(" [here] ")
-                else:
-                    s.append("%7.2f " % (self.value[x][y]))
-            s.append("\n")
-        print("".join(s))
-
     def in_goal(self):
         return self.state == self.target_state
 
     def performAction(self, action):
         """ Changes the state of the environment based on agent action """
-        act = Action(int(action[0]))
-        if self.log != None:
-            self.step_data["path"].append(Transition(self.state, act))
+        self.action = Action(int(action[0]))
+        self.prev_state = self.state
+        self.state = self.do_transition(self.state, self.action)
+        self.n_actions += 1
+        self._log_transition()
 
+    def do_transition(self, state, action):
+        """ Returns next_state ~ p(next_state | state, action)
+        """
         if self.random_state.rand() < self.prob_rnd_move:
-            act = self.random_state.choice(self.actions)
+            action = self.random_state.choice(self.actions)
+        return self._apply_action(state, action)
 
+    def _apply_action(self, state, act):
+        """ Applies action to state, deterministic, returns next state
+        """
         if act == Action.UP:
-            self.state.x += 1
+            s = State(state.x+1, state.y)
         elif act == Action.DOWN:
-            self.state.x -= 1
+            s = State(state.x-1, state.y)
         elif act == Action.LEFT:
-            self.state.y -= 1
+            s = State(state.x, state.y-1)
         elif act == Action.RIGHT:
-            self.state.y += 1
+            s = State(state.x, state.y+1)
         else:
             raise ValueError("Unknown action: {}".format(act))
-        self.state = self.restrict_state(self.state)
-
-        if self.log != None:
-            self.step_data["rewards"].append(self.task.getReward())
-        self.n_actions += 1
+        return self.restrict_state(s)
 
     def restrict_state(self, state):
         """ Return state that is restricted to possible values of x and y
@@ -307,24 +243,60 @@ class GridWorldEnvironment(Environment):
                      y = min(self.grid_size-1, max(0, state.y)))
 
     def get_current_state_features(self):
+        """ Returns a list of the features of the current state
+        """
         return self.grid[self.state]
 
     def get_transitions(self, state):
         """ Returns set of transitions that could be taken from 'state'
         """
+        assert type(state) is State
         ret = set()
-        # Can only go to neighboring states
-        states = [self._restrict_state(State(state.x+1, state.y)),
-                  self._restrict_state(State(state.x-1, state.y)),
-                  self._restrict_state(State(state.x, state.y+1)),
-                  self._restrict_state(State(state.x, state.y-1))]
+        states = self._get_neighboring_states(state)
         # Any action can be taken and lead to any neighboring state
-        for s, a in zip(states, self.actions):
-            ret.add(Transition(s, a))
+        for s in states:
+            for a in self.actions:
+                ret.add(Transition(state, a, s))
         return ret
+
+    def _get_neighboring_states(self, state):
+        """ Returns a set of possible neighboring states
+        """
+        return set([self.restrict_state(State(state.x+1, state.y)),
+                self.restrict_state(State(state.x-1, state.y)),
+                self.restrict_state(State(state.x, state.y+1)),
+                self.restrict_state(State(state.x, state.y-1))])
 
     def getSensors(self):
         """ Returns a scalar (enumerated) measurement of the state """
-        # this function should not change the value of any variables
         return [self.state.__hash__()]  # needs to return a list
+
+    def transition_prob(self, transition):
+        """ returns p(next_state | state, action)
+        """
+        possible_next_states = self._get_neighboring_states(transition.prev_state)
+        n_possible_next_states = len(possible_next_states)
+        if transition.next_state not in possible_next_states:
+            return 0.0
+        intended_state = self._apply_action(transition.prev_state, transition.action)
+        if transition.next_state == intended_state:
+            if n_possible_next_states == 4:
+                # moving freely or against wall
+                return 1.0 - 3*self.prob_rnd_move/4.0
+            elif transition.prev_state != transition.next_state:
+                # moving from corner
+                return 1.0 - 3*self.prob_rnd_move/4.0
+            else:
+                # moving against corner
+                return 1.0 - self.prob_rnd_move/2.0
+        else:
+            if n_possible_next_states == 4:
+                # random move freely or against wall
+                return self.prob_rnd_move/4.0
+            elif transition.prev_state != transition.next_state:
+                # random move from corner
+                return self.prob_rnd_move/4.0
+            else:
+                # random move against corner
+                return self.prob_rnd_move/2.0
 

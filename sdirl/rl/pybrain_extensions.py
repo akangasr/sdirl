@@ -1,7 +1,10 @@
 import numpy as np
 import scipy as sp
 
+from sdirl.rl.utils import Path, Transition
+
 from pybrain.structure.modules.module import Module
+from pybrain.rl.environments import Environment, EpisodicTask
 from pybrain.rl.explorers.discrete import EpsilonGreedyExplorer
 from pybrain.rl.explorers.discrete.discrete import DiscreteExplorer
 from pybrain.rl.learners import Q
@@ -15,21 +18,92 @@ logger = logging.getLogger(__name__)
 Extensions to the pybrain library.
 """
 
+class ParametricLoggingEpisodicTask(EpisodicTask):
+    """ Extension of the basic episodic task with tunable parameters
+        and better support for logging.
+    """
+
+    def __init__(self, env):
+        super(ParametricLoggingEpisodicTask, self).__init__(env)
+        self.env.task = self
+        self.v = None
+
+    def setup(self, variables):
+        """ Set the variables of the task
+        """
+        self.v = variables
+
+
+class ParametricLoggingEnvironment(Environment):
+    """ Extension of the basic environment with tunable parameters
+        and better support for logging.
+    """
+
+    def __init__(self):
+        super(ParametricLoggingEnvironment, self).__init__()
+        self.v = None
+        self.log = None
+        self.task = None  # set by task
+        self.state = None
+        self.prev_state = None
+        self.action = None
+
+    def setup(self, variables, random_state):
+        """ Finishes the initialization
+        """
+        self.v = variables
+        self.random_state = random_state
+        self.reset()
+
+    def _start_log_for_new_session(self):
+        """ Set up log when new session starts
+        """
+        if self.log != None:
+            if "session" not in self.log:
+                self.log["session"] = 0
+                self.log["sessions"] = [dict()]
+            else:
+                self.log["session"] += 1
+                self.log["sessions"].append(dict())
+            self.step_data = self.log["sessions"][self.log["session"]]
+            self.step_data["grid"] = self.grid
+            self.step_data["start"] = self.start_loc_id
+            self.step_data["path"] = Path([])
+            self.step_data["rewards"] = list()
+
+    def _log_transition(self):
+        """ Should be called after transition
+        """
+        if self.log != None:
+            self.step_data["path"].append(Transition(self.prev_state, self.action, self.state))
+            self.step_data["rewards"].append(self.task.getReward())
+
+
 class SparseActionValueTable(ActionValueTable):
     """ Sparse version of the ActionValueTable from pybrain, uses less memory.
     """
 
-    def __init__(self, numActions, random_state, name=None):
+    def __init__(self, numActions, random_state, softq=False, name=None):
         Module.__init__(self, 1, 1, name)
         self.n_actions = numActions
         self.numColumns = numActions
         self.random_state = random_state
+        self.softq = softq
         if isinstance(self, Module) or isinstance(self, Connection):
             self.hasDerivatives = True
         if self.hasDerivatives:
             self._derivs = None
         self.randomize()
         self._params = None
+
+    def _forwardImplementation(self, inbuf, outbuf):
+        """ Take a vector of length 1 (the state coordinate) and return
+            the action with the maximum value over all actions for this state.
+        """
+        if self.softq is False:
+            outbuf[0] = self.getMaxAction(inbuf[0])
+        else:
+            outbuf[0] = self.getSoftMaxAction(inbuf[0])
 
     def randomize(self):
         self.sparse_params = dict() # dictionary-of-rows sparse matrix
@@ -42,6 +116,17 @@ class SparseActionValueTable(ActionValueTable):
         values = self.getActionValues(state)
         action = sp.where(values == max(values))[0]
         return self.random_state.choice(action)
+
+    def getSoftMaxAction(self, state):
+        values = self.getActionValues(state)
+        exp_val = [np.exp(v) for v in values]
+        norm_exp_val = exp_val / sum(exp_val)
+        cum_norm_exp_val = np.cumsum(norm_exp_val)
+        rnd = self.random_state.rand()
+        for idx, lim in enumerate(cum_norm_exp_val):
+            if rnd < lim:
+                return idx
+        assert False
 
     def check_bounds(self, row=None, column=None):
         if row is not None and (row < 0):

@@ -35,6 +35,56 @@ class InitialStateGenerator():
         """
         raise NotImplementedError("Subclass implements")
 
+class Path():
+    def __init__(self, transitions):
+        self.transitions = transitions
+
+    def append(self, transition):
+        self.transitions.append(transition)
+
+    def get_start_state(self):
+        if len(self) < 1:
+            raise ValueError("Path contains no transitions and thus no start state")
+        return self.transitions[0].prev_state
+
+    def __eq__(a, b):
+        if len(a) != len(b):
+            return False
+        for t1, t2 in zip(a.transitions, b.transitions):
+            if t1 != t2:
+                return False
+        return True
+
+    def __len__(self):
+        return len(self.transitions)
+
+    def __repr__(self):
+        ret = list()
+        for t in self.transitions:
+            ret.append("{};".format(t))
+        return "".join(ret)
+
+    def __str__(self):
+        return self.__repr__()
+
+class Transition():
+    def __init__(self, prev_state, action, next_state):
+        self.prev_state = prev_state
+        self.action = action
+        self.next_state = next_state
+
+    def __eq__(a, b):
+        return a.__hash__() == b.__hash__()
+
+    def __hash__(self):
+        return (self.prev_state, self.action, self.next_state).__hash__()
+
+    def __repr__(self):
+        return "T({}+{}->{})".format(self.prev_state, self.action, self.next_state)
+
+    def __str__(self):
+        return self.__repr__()
+
 
 class PathTreeIterator():
     """ Iterator for a path tree
@@ -42,7 +92,7 @@ class PathTreeIterator():
     Parameters
     ----------
     root : Observation
-    paths : dict[observation] = node with nodes being tuples: (state, next observations ...)
+    paths : dict[observation] = node with nodes being list of tuples (transition, next observation)
     """
     def __init__(self, root, paths, maxlen):
         self.root = root
@@ -50,22 +100,24 @@ class PathTreeIterator():
         self.maxlen = maxlen
 
     def __iter__(self):
-        self.indices = [0] * maxlen
+        self.indices = [0] * self.maxlen
         self.end = False
         return self
 
-    def next(self):
+    def __next__(self):
         if self.end is True:
             raise StopIteration()
-        path = list()
+        path = Path([])
         node = self.paths[self.root]
         nvals = list()
         for i in self.indices:
-            path.append(node[0])  # state is first
-            nvals.append(len(node)-1)  # number of children
-            node = self.paths[node[i]]
+            nvals.append(len(node))
+            transition, next_obs = node[i]
+            path.append(transition)
+            assert next_obs in self.paths, "Observation {} not found in tree?".format(next_obs)
+            node = self.paths[next_obs]
         for i in reversed(range(len(self.indices))):
-            if self.indices[i] < nvals[i]:
+            if self.indices[i] < nvals[i]-1:
                 self.indices[i] += 1
                 break
             else:

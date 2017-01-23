@@ -1,12 +1,11 @@
 
 import numpy as np
 
-from sdirl.model import RLModel
+from sdirl.model import RLModel, ELFIModel
 from sdirl.rl.simulator import RLSimulator
-from sdirl.rl.utils import PathTreeIterator
 from sdirl.gridworldmodel.mdp import GridWorldEnvironment, GridWorldTask
-from sdirl.gridworldmodel.mdp import State, Observation
-from sdirl.gridworldmodel.mdp import InitialStateUniformlyAtEdge
+from sdirl.gridworldmodel.mdp import State
+from sdirl.gridworldmodel.mdp import InitialStateUniformlyAtEdge, InitialStateUniformlyAnywhere
 
 import elfi
 from elfi.bo.gpy_model import GPyModel
@@ -15,7 +14,32 @@ import GPy
 import logging
 logger = logging.getLogger(__name__)
 
-class GridWorldModel(RLModel):
+
+class Observation():
+    """ Summary observation: start state of path and path length
+    """
+    def __init__(self, path=None, start_state=None, path_len=None):
+        if path is not None:
+            self.start_state = path.transitions[0].prev_state
+            self.path_len = len(path)
+        else:
+            self.start_state = start_state
+            self.path_len = path_len
+
+    def __eq__(a, b):
+        return a.__hash__() == b.__hash__()
+
+    def __hash__(self):
+        return (self.start_state, self.path_len).__hash__()
+
+    def __repr__(self):
+        return "O({},{})".format(self.start_state, self.path_len)
+
+    def __str__(self):
+        return self.__repr__()
+
+
+class GridWorldModel(RLModel, ELFIModel):
     """ Grid world model
 
     Parameters
@@ -31,11 +55,16 @@ class GridWorldModel(RLModel):
             world_seed=0,
             n_training_episodes=1000,
             n_episodes_per_epoch=10,
-            n_simulation_episodes=100):
+            n_simulation_episodes=100,
+            initial_state="edge",
+            softq=False):
         super(GridWorldModel, self).__init__(variable_names)
 
-        self.initial_state_generator = InitialStateUniformlyAtEdge(grid_size)
-        env = GridWorldEnvironment(
+        if initial_state == "edge":
+            self.initial_state_generator = InitialStateUniformlyAtEdge(grid_size)
+        elif initial_state == "anywhere":
+            self.initial_state_generator = InitialStateUniformlyAnywhere(grid_size)
+        self.env = GridWorldEnvironment(
                     grid_size=grid_size,
                     prob_rnd_move=prob_rnd_move,
                     n_features=len(variable_names),
@@ -43,49 +72,26 @@ class GridWorldModel(RLModel):
                     target_state=State(int(grid_size/2), int(grid_size/2)),
                     initial_state_generator=self.initial_state_generator
                     )
-        task = GridWorldTask(
-                    env=env,
-                    max_number_of_actions_per_session=grid_size*2)
+        self.task = GridWorldTask(
+                    env=self.env,
+                    max_number_of_actions_per_session=grid_size*3)
         self.rl = RLSimulator(
                     n_training_episodes=n_training_episodes,
                     n_episodes_per_epoch=n_episodes_per_epoch,
                     n_simulation_episodes=n_simulation_episodes,
                     var_names=variable_names,
-                    env=env,
-                    task=task)
+                    env=self.env,
+                    task=self.task,
+                    softq=softq)
 
-        self.precomp_paths = dict()
-        self.elfi_variables = list()
+    def summarize(self, raw_observations):
+        return [self.summary(ses["path"]) for ses in raw_observations["sessions"]]
 
-    def _fill_path_tree(self, obs):
-        """ Recursively fill path tree starting from obs
-        """
-        if obs not in self._precomp_paths.keys():
-            if obs.path_len > 0:
-                path = (obs.start_state, )
-                for transition in self.env.get_transitions(obs.start_state):
-                    path += (Observation(transition.state, obs.path_len-1), )
-                self._precomp_paths[obs] = path
-            else:
-                self._precomp_paths[obs] = (obs.start_state, )
-
-    def _get_optimal_policy(self, variables):
-        """ Returns a list of all possible paths that could have generated
-            observation 'obs'.
-        """
-        raise NotImplementedError("Subclass implements")
-
-    def _get_all_paths_for_obs(self, obs):
-        """ Returns a tree containing all possible paths that could have generated
-            observation 'obs'.
-        """
-        self._fill_path_tree(obs)
-        return PathTreeIterator(obs, self._precomp_paths, obs.path_len)
-
+    @staticmethod
     def summary(path):
         """ Returns a summary observation of the full path
         """
-        return Observation(path.states[0], len(path.states))
+        return Observation(path)
 
     def _prob_obs(self, obs, path):
         """ Returns the probability that 'path' would generate 'obs'.
@@ -96,50 +102,35 @@ class GridWorldModel(RLModel):
         path : list of location tuples [(x0, y0), ..., (xn, yn)]
         """
         # deterministic summary
-        if summary(path) == obs:
+        if self.summary(path) == obs:
             return 1.0
         return 0.0
 
-    def _prob_path(self, path, policy, transfer):
-        """ Returns the probability that 'path' would have been generated given 'policy'.
-
-        Parameters
-        ----------
-        path : list of location tuples [(x0, y0), ..., (xn, yn)]
-        policy : callable(state, action) -> p(action | state)
-        transfer : callable(state, action, state') -> p(state' | state, action)
+    def _fill_path_tree(self, obs):
+        """ Recursively fill path tree starting from obs
         """
-        logp = 0
-        # assume all start states equally probable
-        for i in range(len(path.states)-1):
-            act_i_prob = policy(path.states(i), path.actions(i))
-            tra_i_prob = transfer(path.states(i), path.actions(i), path.states(i+1))
-            logp += np.log(act_i_prob) + np.log(tra_i_prob)
-        return np.exp(logp)
-
-    def simulate_observations(self, variables, random_state):
-        """ Simulates observations from model with variable values.
-
-        Parameters
-        ----------
-        variables : list of values, matching variable_names
-        random_state : random value source
-
-        Returns
-        -------
-        Dataset compatible with model
-        """
-        logger.info("simulating observations at: {}".format(variables))
-        return self.rl(*variables, random_state=random_state)
+        if obs not in self._precomp_paths.keys():
+            if obs.path_len > 0:
+                node = list()
+                for transition in self.env.get_transitions(obs.start_state):
+                    next_obs = Observation(start_state=transition.next_state,
+                                           path_len=obs.path_len-1)
+                    node.append((transition, next_obs))
+                self._precomp_paths[obs] = node
+                for transition, next_obs in node:
+                    self._fill_path_tree(next_obs)
+            else:
+                self._precomp_paths[obs] = tuple()
 
     def calculate_discrepancy(self, observations, sim_observations):
+        assert type(observations[0]) == dict
+        assert type(sim_observations[0]) == dict
         features = [self._path_len_by_start(i, observations[0]) for i in range(self.initial_state_generator.n_initial_states)]
         features_sim = [self._path_len_by_start(i, sim_observations[0]) for i in range(self.initial_state_generator.n_initial_states)]
         disc = 0.0
         for f, fs in zip(features, features_sim):
-            disc += (float(f) - float(fs)) ** 2
-        disc /= 1000.0  # scaling
-        logger.info("f: {}, f_sim: {}, disc: {}".format(features, features_sim, disc))
+            disc += np.abs(float(f) - float(fs))
+        disc /= len(features)  # scaling
         return disc
 
     @staticmethod
@@ -157,27 +148,6 @@ class GridWorldModel(RLModel):
     def get_bounds(self):
         ret = []
         for v in self.variable_names:
-            ret.append((-0.5, 0))
+            ret.append((-1, 0))
         return tuple(ret)
 
-    def get_elfi_gpmodel(self, approximate):
-        kernel_class = GPy.kern.RBF
-        noise_var = 0.05
-        model = GPyModel(input_dim=len(self.variable_names),
-                        bounds=self.get_bounds(),
-                        kernel_class=kernel_class,
-                        kernel_var=0.05,
-                        kernel_scale=0.1,
-                        noise_var=noise_var,
-                        optimizer="scg",
-                        max_opt_iters=50)
-        return model
-
-    def get_elfi_variables(self, inference_task):
-        if len(self.elfi_variables) > 0:
-            return self.elfi_variables
-        bounds = self.get_bounds()
-        for v, b in zip(self.variable_names, bounds):
-            v = elfi.Prior(v, "uniform", b[0], b[1], inference_task=inference_task)
-            self.elfi_variables.append(v)
-        return self.elfi_variables
