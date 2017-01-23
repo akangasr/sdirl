@@ -21,5 +21,11 @@ if __name__ == "__main__":
     approximate = True
     n_surrogate_samples = 200
     batch_size = 10
-    posterior = ML_inference(model, ground_truth, approximate, n_surrogate_samples, batch_size)
+    seed = 123987123
+    posterior = ML_inference(seed,
+                             model,
+                             ground_truth,
+                             approximate,
+                             n_surrogate_samples,
+                             batch_size)
     logger.info("End")

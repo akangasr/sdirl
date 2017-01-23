@@ -16,14 +16,14 @@ logger = logging.getLogger(__name__)
 
 import warnings
 
-def default_setup_triton(args):
+def default_setup_triton(seed, args):
     """ Default experiment setup for triton
     """
     logging_setup()
     logger.info("Start")
     setup_matplotlib_backend_no_xenv()
     disable_pybrain_warnings()
-    rs = random_seed_setup()
+    rs = random_seed_setup(seed)
     client = dask_client_setup(args)
     return rs, client
 
@@ -62,12 +62,12 @@ def logging_setup():
     elfi_methods_logger.handlers = [ch]
     logger.handlers = [ch]
 
-def random_seed_setup():
+def random_seed_setup(seed):
     """ Fix random seeds, return a random value source
     """
-    np.random.seed(1234)
-    random.seed(1234)
-    return np.random.RandomState(5678)
+    random.seed(seed)
+    np.random.seed(random.randint(0, 10e7))
+    return np.random.RandomState(random.randint(0, 10e7))
 
 def dask_client_setup(args):
     """ Set up and return a dask client or None
@@ -80,8 +80,8 @@ def dask_client_setup(args):
         dask.set_options(get=client.get)
     return client
 
-def ML_inference(model, ground_truth, approximate, n_surrogate_samples, batch_size):
-    rs, client = default_setup_triton(sys.argv)
+def ML_inference(seed, model, ground_truth, approximate, n_surrogate_samples, batch_size):
+    rs, client = default_setup_triton(seed, sys.argv)
     logger.info("Simulating observations at {} ..".format(ground_truth))
     obs = model.simulate_observations(ground_truth, rs)
     wrapper = BOLFIModelWrapper(model, obs, approximate=approximate)
