@@ -21,8 +21,7 @@ class RLSimulator():
             n_simulation_episodes,
             var_names,
             env,
-            task,
-            softq=False):
+            task):
         """
 
         Parameters
@@ -47,8 +46,16 @@ class RLSimulator():
         self.var_names = var_names
         self.env = env
         self.task = task
-        self.softq = softq
+        self.softq = False
         self.agent = None
+
+    def to_json(self):
+        return {
+                "n_training_episodes": self.n_training_episodes,
+                "n_episodes_per_epoch": self.n_episodes_per_epoch,
+                "n_simulation_episodes": self.n_simulation_episodes,
+                "var_names": self.var_names,
+                }
 
     def train_model(self, *variables, random_state=None):
         self._set_variables(variables)
@@ -69,7 +76,7 @@ class RLSimulator():
         -------
         Simulated trajectories as a dict encapsulated in 1D numpy array
         """
-        self.train_model(*args, random_state)
+        self.train_model(*args, random_state=random_state)
         log_dict = self.simulate(random_state)
         return np.atleast_1d([log_dict])
 
@@ -109,7 +116,7 @@ class RLSimulator():
         for i in range(n_epochs):
             self.experiment.doEpisodes(self.n_episodes_per_epoch)
             self.agent.learn()
-            self.agent.reset()
+            self.agent.reset()  # reset buffers
 
     def simulate(self, random_state):
         """ Simulates agent behavior in 'n_sim' episodes.
@@ -169,12 +176,12 @@ class Policy():
     def __call__(self, state, action):
         """ Returns p(action | state) accoring to deterministic policy with ties broken arbitrarily
         """
-        s = state.__hash__()
+        s = float(state.__hash__())  # pybrain secretly casts state to float when we do rl
         a = int(action)
         qvalues = self.module.getActionValues(s)
         maxq = max(qvalues)
         if qvalues[a] == maxq:
             n_max = sum([1 if q == maxq else 0 for q in qvalues])
             return 1.0 / n_max
-        return 0.0
+        return 0
 

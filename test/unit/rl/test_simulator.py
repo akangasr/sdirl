@@ -13,3 +13,4 @@ class TestRLModel():
             var_names=["var1"],
             env=Mock(Environment),
             task=Mock(EpisodicTask))
+

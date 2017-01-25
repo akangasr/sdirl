@@ -36,6 +36,15 @@ class Model():
         self.variable_names = variable_names
         self.n_var = len(self.variable_names)
 
+    def to_json(self):
+        """ Returns a json-serialized dict
+        """
+        ret = {
+                "variable_names" : self.variable_names,
+                "n_var" : self.n_var,
+                }
+        return ret
+
     def evaluate_loglikelihood(self, variables, observations, random_state):
         """ Evaluates logarithm of unnormalized likelihood of variables given observations.
 
@@ -109,12 +118,24 @@ class Model():
 
 class ELFIModel(Model):
 
-    kernel_class = GPy.kern.RBF
-    noise_var = 0.05
-    kernel_var = 0.05
-    kernel_scale = 0.1
-    optimizer = "scg"
-    max_opt_iters = 50
+    def __init__(self, variable_names):
+        super(ELFIModel, self).__init__(variable_names)
+        self.kernel_class = GPy.kern.RBF
+        self.noise_var = 0.05
+        self.kernel_var = 0.05
+        self.kernel_scale = 0.1
+        self.optimizer = "scg"
+        self.max_opt_iters = 50
+
+    def to_json(self):
+        ret = super(ELFIModel, self).to_json()
+        ret["kernel_class"] = self.kernel_class.__name__
+        ret["noise_var"] = self.noise_var
+        ret["kernel_var"] = self.kernel_var
+        ret["kernel_scale"] = self.kernel_scale
+        ret["optimizer"] = self.optimizer
+        ret["max_opt_iters"] = self.max_opt_iters
+        return ret
 
     def get_elfi_gpmodel(self, approximate):
         """ Returns a gaussian process model for use in ELFI.
@@ -155,29 +176,52 @@ class ELFIModel(Model):
 class RLModel(Model):
     """ RL based model
     """
-    env = None
-    task = None
-    rl = None  # RLModel
-    _precomp_paths = dict()
-    prev_variables = []
+
+    def __init__(self, variable_names, verbose):
+        super(RLModel, self).__init__(variable_names)
+        self.verbose = verbose
+        self.env = None
+        self.task = None
+        self.rl = None  # RLModel
+        self.goal_state = None
+        self.path_max_len = None
+        self._precomp_paths = dict()
+        self.prev_variables = []
+        self._precomp_obs_logprobs = dict()
+
+    def to_json(self):
+        ret = super(RLModel, self).to_json()
+        ret["verbose"] = int(self.verbose)
+        ret["env"] = self.env.to_json()
+        ret["task"] = self.task.to_json()
+        ret["rl"] = self.rl.to_json()
+        ret["goal_state"] = self.goal_state
+        ret["path_max_len"] = self.path_max_len
+        return ret
 
     def evaluate_loglikelihood(self, variables, observations, random_state):
+        assert len(observations) > 0
         ind_log_obs_probs = list()
         policy = self._get_optimal_policy(variables, random_state)
         for obs_i in observations:
+            if obs_i in self._precomp_obs_logprobs.keys():
+                logprob = self._precomp_obs_logprobs[obs_i]
+                ind_log_obs_probs.append(logprob)
+                continue
             prob_i = 0.0
             paths = self.get_all_paths_for_obs(obs_i)
             for path in paths:
                 prob_obs = self._prob_obs(obs_i, path)
-                assert prob_obs > 0.0, "Paths should all have positive probability, but p({})={}"\
+                assert prob_obs > 0, "Paths should all have positive probability, but p({})={}"\
                         .format(path, prob_obs)
                 prob_path = self._prob_path(path, policy)
-                #print(path, obs_i, prob_obs, prob_path)
-                prob_i += prob_obs * prob_path
-            assert 0.0 - 1e-10 < prob_i < 1.0 + 1e-10 , prob_i
-            ind_log_obs_probs.append(np.log(prob_i))
-            print(prob_i, np.log(prob_i))
-        print(ind_log_obs_probs, sum(ind_log_obs_probs))
+                if prob_path > 0:
+                    prob_i += prob_obs * prob_path
+            assert 0.0 - 1e-10 < prob_i < 1.0 + 1e-10 , "Probability should be between 0 and 1 but was {}"\
+                    .format(prob_i)
+            logprob = np.log(prob_i)
+            self._precomp_obs_logprobs[obs_i] = logprob
+            ind_log_obs_probs.append(logprob)
         return sum(ind_log_obs_probs)
 
     def simulate_observations(self, variables, random_state):
@@ -214,6 +258,9 @@ class RLModel(Model):
         if not np.array_equal(self.prev_variables, variables):
             self.rl.train_model(*variables, random_state=random_state)
             self.prev_variables = variables
+            self._precomp_obs_logprobs = dict()
+            if self.verbose is True:
+                self.env.print_policy(self._get_optimal_policy(variables, random_state))
 
     def _fill_path_tree(self, obs):
         """ Recursively fill path tree starting from obs
@@ -241,13 +288,22 @@ class RLModel(Model):
         policy : callable(state, action) -> p(action | state)
         """
         logp = 0
+        if len(path) < self.path_max_len and path.transitions[-1].next_state != self.target_state:
+            return 0.0
         # assume all start states equally probable
         for transition in path.transitions:
             state = transition.prev_state
             action = transition.action
             next_state = transition.next_state
+            if state == self.target_state:
+                # goal state can only be a 'next state' as it is absorbing
+                return 0.0
             act_i_prob = policy(state, action)
+            if act_i_prob == 0:
+                return 0.0
             tra_i_prob = self.env.transition_prob(transition)
+            if tra_i_prob == 0:
+                return 0.0
             logp += np.log(act_i_prob) + np.log(tra_i_prob)
         return np.exp(logp)
 

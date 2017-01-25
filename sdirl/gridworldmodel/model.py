@@ -51,38 +51,49 @@ class GridWorldModel(RLModel, ELFIModel):
     def __init__(self,
             variable_names,
             grid_size=11,
+            step_penalty=0.1,
             prob_rnd_move=0.1,
             world_seed=0,
             n_training_episodes=1000,
             n_episodes_per_epoch=10,
             n_simulation_episodes=100,
             initial_state="edge",
-            softq=False):
-        super(GridWorldModel, self).__init__(variable_names)
+            verbose=False):
+        super(GridWorldModel, self).__init__(variable_names, verbose)
 
-        if initial_state == "edge":
+        self.initial_state = initial_state
+        if self.initial_state == "edge":
             self.initial_state_generator = InitialStateUniformlyAtEdge(grid_size)
-        elif initial_state == "anywhere":
+        elif self.initial_state == "anywhere":
             self.initial_state_generator = InitialStateUniformlyAnywhere(grid_size)
+
+        self.target_state = State(int(grid_size/2), int(grid_size/2))
+        self.path_max_len = grid_size*3
         self.env = GridWorldEnvironment(
                     grid_size=grid_size,
                     prob_rnd_move=prob_rnd_move,
                     n_features=len(variable_names),
                     world_seed=world_seed,
-                    target_state=State(int(grid_size/2), int(grid_size/2)),
+                    target_state=self.target_state,
                     initial_state_generator=self.initial_state_generator
                     )
         self.task = GridWorldTask(
                     env=self.env,
-                    max_number_of_actions_per_session=grid_size*3)
+                    step_penalty=step_penalty,
+                    max_number_of_actions_per_session=self.path_max_len)
         self.rl = RLSimulator(
                     n_training_episodes=n_training_episodes,
                     n_episodes_per_epoch=n_episodes_per_epoch,
                     n_simulation_episodes=n_simulation_episodes,
                     var_names=variable_names,
                     env=self.env,
-                    task=self.task,
-                    softq=softq)
+                    task=self.task)
+        if self.verbose is True:
+            self.env.print_grid()
+
+    def to_json(self):
+        ret = super(GridWorldModel, self).to_json()
+        ret["initial_state"] = self.initial_state
 
     def summarize(self, raw_observations):
         return [self.summary(ses["path"]) for ses in raw_observations["sessions"]]
@@ -123,27 +134,23 @@ class GridWorldModel(RLModel, ELFIModel):
                 self._precomp_paths[obs] = tuple()
 
     def calculate_discrepancy(self, observations, sim_observations):
-        assert type(observations[0]) == dict
-        assert type(sim_observations[0]) == dict
-        features = [self._path_len_by_start(i, observations[0]) for i in range(self.initial_state_generator.n_initial_states)]
-        features_sim = [self._path_len_by_start(i, sim_observations[0]) for i in range(self.initial_state_generator.n_initial_states)]
+        features = [self._avg_path_len_by_start(i, observations) for i in range(self.initial_state_generator.n_initial_states)]
+        features_sim = [self._avg_path_len_by_start(i, sim_observations) for i in range(self.initial_state_generator.n_initial_states)]
         disc = 0.0
         for f, fs in zip(features, features_sim):
-            disc += np.abs(float(f) - float(fs))
+            disc += np.abs(f - fs)
         disc /= len(features)  # scaling
         return disc
 
-    @staticmethod
-    def _path_len_by_start(start_id, log):
+    def _avg_path_len_by_start(self, start_id, obs):
+        state = self.initial_state_generator.get_initial_state(start_id)
         vals = []
-        for ses in log["sessions"]:
-            if ses["start"] == start_id:
-                vals.append(len(ses["path"]))
+        for o in obs:
+            if o.start_state == state:
+                vals.append(o.path_len)
         if len(vals) > 0:
-            ret = np.mean(vals)
-        else:
-            ret = 0
-        return np.atleast_1d(ret)
+            return np.mean(vals)
+        return 0.0
 
     def get_bounds(self):
         ret = []

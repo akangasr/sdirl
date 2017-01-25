@@ -16,8 +16,8 @@ Definition of the MDP.
 
 class State():
     def __init__(self, x, y):
-        self.x = x
-        self.y = y
+        self.x = int(x)
+        self.y = int(y)
 
     def __eq__(a, b):
         return a.__hash__() == b.__hash__()
@@ -95,26 +95,35 @@ class InitialStateUniformlyAnywhere(InitialStateGenerator):
 
 class GridWorldTask(ParametricLoggingEpisodicTask):
 
-    def __init__(self, env, max_number_of_actions_per_session):
+    def __init__(self, env, max_number_of_actions_per_session, step_penalty):
         super(GridWorldTask, self).__init__(env)
 
         self.goal_value = 1.0
         self.env.task = self
         self.max_number_of_actions_per_session = max_number_of_actions_per_session
+        self.step_penalty = step_penalty
+
+    def to_json(self):
+        return {
+                "max_number_of_actions_per_session": self.max_number_of_actions_per_session,
+                "step_penalty": step_penalty
+                }
 
     def setup(self, variables):
         self.v = variables
+
+    def calculate_value(self, state):
+        features = self.env.get_state_features(state)
+        value = features[0] * self.goal_value
+        for i in range(1, len(features)):
+            value += features[i] * self.v["feature{}_value".format(i)]
+        return value
 
     def getReward(self):
         """ Returns the current reward based on the state of the environment
         """
         # this function should be deterministic and without side effects
-        features = self.env.get_current_state_features()
-        value = self.v["step_penalty"]
-        value += features[0] * self.goal_value
-        for i in range(1, len(features)):
-            value += features[i] * self.v["feature{}_value".format(i)]
-        return value
+        return self.calculate_value(self.env.state) - self.step_penalty
 
     def isFinished(self):
         """ Returns true when the task is in end state """
@@ -172,6 +181,15 @@ class GridWorldEnvironment(ParametricLoggingEnvironment):
         self.discreteActions = True
         self.numActions = len(self.actions)
 
+    def to_json(self):
+        return {
+                "grid_size": self.grid_size,
+                "prob_rnd_move": self.prob_rnd_move,
+                "n_features": self.n_features,
+                "world_seed": self.world_seed,
+                "target_state": self.target_state,
+                }
+
     def _generate_grid(self):
         """ Returns the grid
         """
@@ -181,20 +199,52 @@ class GridWorldEnvironment(ParametricLoggingEnvironment):
             for y in range(self.grid_size):
                 state = State(x, y)
                 features = list()
-                for k in range(self.n_features):
+                for k in range(self.n_features+1):
                     if k == 0:
                         # first feature is unique to goal state
                         if state == self.target_state:
-                            features.append(1.0)
+                            features.append(1)
                         else:
-                            features.append(0.0)
+                            features.append(0)
                     else:
-                        if rs.uniform(0,1) < 0.3:
-                            features.append(rs.exponential(2))
+                        if state == self.target_state:
+                            # goal state doesn't have other features
+                            features.append(0)
+                        elif rs.uniform(0,1) < 0.4:
+                            features.append(1)
                         else:
-                            features.append(0.0)
+                            features.append(0)
                 grid[state] = features
         return grid
+
+    def print_grid(self):
+        """ Visualizes grid values
+        """
+        for x in reversed(range(self.grid_size)):
+            s = list()
+            for y in range(self.grid_size):
+                s.append("{}".format(self.grid[State(x, y)]))
+            logger.info("".join(s))
+
+    def print_policy(self, policy):
+        """ Visualizes policy
+        """
+        for x in reversed(range(self.grid_size)):
+            s = list()
+            for y in range(self.grid_size):
+                state = State(x, y)
+                s.append("[{:+1.2f} ".format(float(self.task.calculate_value(state))))
+                if policy(state, Action.UP) > 0.5:
+                    s.append("^]")
+                elif policy(state, Action.DOWN) > 0.5:
+                    s.append("v]")
+                elif policy(state, Action.LEFT) > 0.5:
+                    s.append("<]")
+                elif policy(state, Action.RIGHT) > 0.5:
+                    s.append(">]")
+                else:
+                    s.append("?]")
+            logger.info("".join(s))
 
     def reset(self):
         """ Called by the library to reset the state """
@@ -242,10 +292,10 @@ class GridWorldEnvironment(ParametricLoggingEnvironment):
         return State(x = min(self.grid_size-1, max(0, state.x)),
                      y = min(self.grid_size-1, max(0, state.y)))
 
-    def get_current_state_features(self):
-        """ Returns a list of the features of the current state
+    def get_state_features(self, state):
+        """ Returns a list of the features of 'state'
         """
-        return self.grid[self.state]
+        return self.grid[state]
 
     def get_transitions(self, state):
         """ Returns set of transitions that could be taken from 'state'
