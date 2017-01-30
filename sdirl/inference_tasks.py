@@ -242,6 +242,7 @@ class BOLFI_ML_Experiment(BOLFI_ML):
     def __init__(self, env, seed, cmdargs, model, ground_truth, bolfi_params, approximate):
         super(BOLFI_ML_Experiment, self).__init__(env, seed, cmdargs, model, ground_truth, bolfi_params)
         self.approximate = approximate
+        logger.info("BOLFI ML EXPERIMENT WITH APPROXIMATE={}".format(self.approximate))
 
     def run(self):
         self._generate_observations()
@@ -255,6 +256,10 @@ class BOLFI_ML_ComparisonExperiment(BOLFI_ML):
     """ Experiment where we have two competing methods for inferring the ML estimate of a model
         using the exact same set of observations: approximate and exact likelihood maximization
     """
+
+    def __init__(self, env, seed, cmdargs, model, ground_truth, bolfi_params):
+        super(BOLFI_ML_ComparisonExperiment, self).__init__(env, seed, cmdargs, model, ground_truth, bolfi_params)
+        logger.info("BOLFI ML COMPARISON EXPERIMENT")
 
     def run(self):
         self._generate_observations()
