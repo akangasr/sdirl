@@ -47,7 +47,7 @@ class TestBOLFI_ML_ComparisonExperiment():
         self.cmdargs = list()
         self.model = SimpleGaussianModel(["mean"])
         self.ground_truth = [0]
-        self.bolfi_params = BolfiParams(10, 1)
+        self.bolfi_params = BolfiParams(20, 1)
         self.exp = BOLFI_ML_ComparisonExperiment(self.env,
                 self.seed,
                 self.cmdargs,
@@ -58,7 +58,7 @@ class TestBOLFI_ML_ComparisonExperiment():
     def test_initialization_calls_environment_setup(self):
         assert self.env.setup.called
 
-    @slow  # ~2min
+    @slow  # ~5min
     def test_running_generates_reasonable_results(self):
         self.exp.run()
         assert np.abs(self.exp.results["results_disc"].posteriors[-1].ML[0] - self.ground_truth[0]) < 0.1
