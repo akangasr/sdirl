@@ -189,12 +189,12 @@ class BOLFI_ML_ComparisonExperiment():
 
     def _print_errors(self, errors):
         logger.info("Errors:")
-        grid = 20
+        grid = 30
         lim = max(errors) / float(grid)
         for n in reversed(range(grid)):
             st = ["{: >+5.3f}".format(n*lim)]
             for e in errors:
-                if int(e) >= n*lim:
+                if e >= n*lim:
                     st.append("*")
                 else:
                     st.append(" ")
