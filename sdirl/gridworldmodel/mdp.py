@@ -103,7 +103,7 @@ class GridWorldTask(ParametricLoggingEpisodicTask):
         self.max_number_of_actions_per_session = max_number_of_actions_per_session
         self.step_penalty = step_penalty
 
-    def to_json(self):
+    def to_dict(self):
         return {
                 "max_number_of_actions_per_session": self.max_number_of_actions_per_session,
                 "step_penalty": step_penalty
@@ -181,7 +181,7 @@ class GridWorldEnvironment(ParametricLoggingEnvironment):
         self.discreteActions = True
         self.numActions = len(self.actions)
 
-    def to_json(self):
+    def to_dict(self):
         return {
                 "grid_size": self.grid_size,
                 "prob_rnd_move": self.prob_rnd_move,

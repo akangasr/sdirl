@@ -36,7 +36,7 @@ class Model():
         self.variable_names = variable_names
         self.n_var = len(self.variable_names)
 
-    def to_json(self):
+    def to_dict(self):
         """ Returns a json-serialized dict
         """
         ret = {
@@ -127,8 +127,8 @@ class ELFIModel(Model):
         self.optimizer = "scg"
         self.max_opt_iters = 50
 
-    def to_json(self):
-        ret = super(ELFIModel, self).to_json()
+    def to_dict(self):
+        ret = super(ELFIModel, self).to_dict()
         ret["kernel_class"] = self.kernel_class.__name__
         ret["noise_var"] = self.noise_var
         ret["kernel_var"] = self.kernel_var
@@ -189,12 +189,12 @@ class RLModel(Model):
         self.prev_variables = []
         self._precomp_obs_logprobs = dict()
 
-    def to_json(self):
-        ret = super(RLModel, self).to_json()
+    def to_dict(self):
+        ret = super(RLModel, self).to_dict()
         ret["verbose"] = int(self.verbose)
-        ret["env"] = self.env.to_json()
-        ret["task"] = self.task.to_json()
-        ret["rl"] = self.rl.to_json()
+        ret["env"] = self.env.to_dict()
+        ret["task"] = self.task.to_dict()
+        ret["rl"] = self.rl.to_dict()
         ret["goal_state"] = self.goal_state
         ret["path_max_len"] = self.path_max_len
         return ret

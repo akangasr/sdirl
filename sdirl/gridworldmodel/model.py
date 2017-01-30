@@ -91,9 +91,10 @@ class GridWorldModel(RLModel, ELFIModel):
         if self.verbose is True:
             self.env.print_grid()
 
-    def to_json(self):
-        ret = super(GridWorldModel, self).to_json()
+    def to_dict(self):
+        ret = super(GridWorldModel, self).to_dict()
         ret["initial_state"] = self.initial_state
+        return ret
 
     def summarize(self, raw_observations):
         return [self.summary(ses["path"]) for ses in raw_observations["sessions"]]

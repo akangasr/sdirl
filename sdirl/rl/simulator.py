@@ -49,7 +49,7 @@ class RLSimulator():
         self.softq = False
         self.agent = None
 
-    def to_json(self):
+    def to_dict(self):
         return {
                 "n_training_episodes": self.n_training_episodes,
                 "n_episodes_per_epoch": self.n_episodes_per_epoch,

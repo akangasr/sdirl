@@ -61,12 +61,12 @@ class TestBOLFI_ML_ComparisonExperiment():
     @slow  # ~2min
     def test_running_generates_reasonable_results(self):
         self.exp.run()
-        assert np.abs(self.exp.results["posteriors_disc"][-1].ML[0] - self.ground_truth[0]) < 0.1
-        assert np.abs(self.exp.results["posteriors_logl"][-1].ML[0] - self.ground_truth[0]) < 0.1
-        assert self.exp.results["errors_disc"][-1] < 0.1
-        assert self.exp.results["errors_logl"][-1] < 0.1
-        assert self.exp.results["duration_disc"] > 1e-3
-        assert self.exp.results["duration_logl"] > 1e-3
+        assert np.abs(self.exp.results["results_disc"].posteriors[-1].ML[0] - self.ground_truth[0]) < 0.1
+        assert np.abs(self.exp.results["results_logl"].posteriors[-1].ML[0] - self.ground_truth[0]) < 0.1
+        assert self.exp.results["results_disc"].errors[-1] < 0.1
+        assert self.exp.results["results_logl"].errors[-1] < 0.1
+        assert self.exp.results["results_disc"].duration > 1e-3
+        assert self.exp.results["results_logl"].duration > 1e-3
 
 
 class TestBOLFIModelWrapper():

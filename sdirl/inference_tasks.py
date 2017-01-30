@@ -88,10 +88,8 @@ class BolfiParams():
         self.n_surrogate_samples = n_surrogate_samples
         self.batch_size = batch_size
 
-
-class BOLFI_ML_ComparisonExperiment():
-    """ Experiment where we have two competing methods for inferring the ML estimate of a model:
-        approximate and exact likelihood maximization
+class BOLFI_ML():
+    """ Base class for BOLFI ML experiments
 
     Parameters
     ----------
@@ -113,30 +111,12 @@ class BOLFI_ML_ComparisonExperiment():
         self.ground_truth = ground_truth
         self.bolfi_params = bolfi_params
         self.obs = list()
-        self.results = {
-                    "posteriors_disc": list(),
-                    "errors_disc": list(),
-                    "duration_disc": -1,
-                    "posteriors_logl": list(),
-                    "errors_logl": list(),
-                    "duration_logl": -1,
-                    }
+        self.results = dict()
 
     def run(self):
-        self._generate_observations()
-        start_time = time.time()
-        posteriors_disc, errors_disc = self._run_inference(approximate=True)
-        mid_time = time.time()
-        posteriors_logl, errors_logl = self._run_inference(approximate=False)
-        end_time = time.time()
-        self.results = {
-                "posteriors_disc": posteriors_disc,
-                "errors_disc": errors_disc,
-                "duration_disc": mid_time - start_time,
-                "posteriors_logl": posteriors_disc,
-                "errors_logl": errors_logl,
-                "duration_logl": end_time - mid_time,
-                }
+        """ Runs the experiment
+        """
+        raise NotImplementedError("Subclass implements")
 
     def _generate_observations(self):
         """ Generate observations for the inference task
@@ -161,72 +141,129 @@ class BOLFI_ML_ComparisonExperiment():
     def _run_inference(self, approximate):
         logger.info("Inferring ML (approximate={})..".format(approximate))
         bolfi, store = self._construct_BOLFI(self.model, approximate=approximate)
+        start_time = time.time()
         bolfi.infer()
+        end_time = time.time()
         posteriors = [BolfiPosteriorUtility.from_model(store.get("BOLFI-model", i)[0])
                 for i in range(self.bolfi_params.n_surrogate_samples)]
         errors = [self._calculate_errors(p) for p in posteriors]
         logger.info("Ground truth: {}, ML estimate: {}".format(self.ground_truth, posteriors[-1].ML))
-        self._print_errors(errors)
-        return posteriors, errors
+        results = BOLFIExperimentResults(posteriors, errors, end_time - start_time)
+        results.print_errors()
+        return results
 
     def _serialized_results(self):
-        return {
-                "posteriors_disc": [BolfiPosteriorUtility.to_dict(p) for p in self.results["posteriors_disc"]],
-                "errors_disc": self.results["errors_disc"],
-                "duration_disc": self.results["duration_disc"],
-                "posteriors_logl": [BolfiPosteriorUtility.to_dict(p) for p in self.results["posteriors_logl"]],
-                "errors_logl": self.results["errors_logl"],
-                "duration_logl": self.results["duration_logl"],
-                }
+        """ Returns a serializable version of self.results
+        """
+        ret = dict()
+        for k, v in self.results.items():
+            ret[k] = v.to_dict()
+        return ret
 
     def _deserialize_results(self, ser_res):
-        self.results["posteriors_disc"] = [BolfiPosteriorUtility.from_dict(p) for p in ser_res["posteriors_disc"]]
-        self.results["errors_disc"] = ser_res["errors_disc"]
-        self.results["duration_disc"] = ser_res["duration_disc"]
-        self.results["posteriors_logl"] = [BolfiPosteriorUtility.from_dict(p) for p in ser_res["posteriors_logl"]]
-        self.results["errors_logl"] = ser_res["errors_logl"]
-        self.results["duration_logl"] = ser_res["duration_logl"]
+        """ Rewrites self.results from a serializable version
+        """
+        for k, v in ser_res.items():
+            self.results[k] = BOLFIExperimentResults.from_dict(v)
 
-    def _print_errors(self, errors):
-        logger.info("Errors:")
-        grid = 30
-        lim = max(errors) / float(grid)
-        for n in reversed(range(grid)):
-            st = ["{: >+5.3f}".format(n*lim)]
-            for e in errors:
-                if e >= n*lim:
-                    st.append("*")
-                else:
-                    st.append(" ")
-            logger.info("".join(st))
-
-    def to_json(self):
+    def to_dict(self):
         return {
             "seed": self.seed,
             "cmdargs": self.cmdargs,
             "model_class": self.model.__class__.__name__,
-            "model": self.model.to_json(),
+            "model": self.model.to_dict(),
             "ground_truth": self.ground_truth,
             "bolfi_params": self.bolfi_params.__dict__,
             "obs_class": "" if len(self.obs) == 0 else self.obs[0].__class__.__name__,
-            "obs": [o.to_json() for o in self.obs],
+            "obs": [o.to_dict() for o in self.obs],
             "results": self._serialized_results(),
             }
 
     @staticmethod
-    def from_json(data):
+    def from_dict(data):
         seed = data["seed"]
         cmdargs = data["cmdargs"]
-        model = eval(data["model_class"]).from_json(data["model"])
+        model = eval(data["model_class"]).from_dict(data["model"])
         ground_truth = data["ground_truth"]
         bolfi_params = BolfiParams()
         bolfi_params.__dict__ = data["bolfi_params"]
         exp = BOLFI_ML_ComparisonExperiment(seed, cmdargs, model, ground_truth, bolfi_params)
         if len(data["obs_class"]) > 0:
             obs_class = eval(data["obs_class"])
-            exp.obs = [obs_class.from_json(j) for j in data["obs"]]
+            exp.obs = [obs_class.from_dict(j) for j in data["obs"]]
         exp._deserialize_results(data["results"])
         return exp
+
+
+class BOLFIExperimentResults():
+
+    def __init__(self, posteriors, errors, duration):
+        self.posteriors = posteriors
+        self.errors = errors
+        self.duration = duration
+
+    def print_errors(self, grid=30):
+        logger.info("Errors:")
+        lim = max(self.errors) / float(grid)
+        for n in reversed(range(grid)):
+            st = ["{: >+5.3f}".format(n*lim)]
+            for e in self.errors:
+                if e >= n*lim:
+                    st.append("*")
+                else:
+                    st.append(" ")
+            logger.info("".join(st))
+
+    def to_dict(self):
+        return {
+                "posteriors": [BolfiPosteriorUtility.to_dict(p) for p in self.results["posteriors_disc"]],
+                "errors": self.errors,
+                "duration": self.duration,
+                }
+
+    @staticmethod
+    def from_dict(d):
+        posteriors = [BolfiPosteriorUtility.from_dict(p) for p in d["posteriors"]]
+        errors = d["errors"]
+        duration = d["duration"]
+        return BOLFIExperimentResults(posteriors, errors, duration)
+
+
+class BOLFI_ML_Experiment(BOLFI_ML):
+    """ Experiment where we have one method for inferring the ML estimate of a model:
+        approximate or exact likelihood maximization
+
+    Parameters
+    ----------
+    approximate : bool
+        True: discrepancy based inference
+        False: likelihood based inference
+    """
+    def __init__(self, env, seed, cmdargs, model, ground_truth, bolfi_params, approximate):
+        super(BOLFI_ML_Experiment, self).__init__(env, seed, cmdargs, model, ground_truth, bolfi_params)
+        self.approximate = approximate
+
+    def run(self):
+        self._generate_observations()
+        results = self._run_inference(approximate=self.approximate)
+        self.results = {
+                "results": results,
+                }
+
+
+class BOLFI_ML_ComparisonExperiment(BOLFI_ML):
+    """ Experiment where we have two competing methods for inferring the ML estimate of a model
+        using the exact same set of observations: approximate and exact likelihood maximization
+    """
+
+    def run(self):
+        self._generate_observations()
+        results_disc = self._run_inference(approximate=True)
+        results_logl = self._run_inference(approximate=False)
+        self.results = {
+                "results_disc": results_disc,
+                "results_logl": results_logl,
+                }
 
 
 def write_json_file(filename, data):
