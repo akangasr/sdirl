@@ -252,6 +252,11 @@ class RLModel(Model):
         self._train_model_if_needed(variables, random_state)
         return self.rl.get_policy()
 
+    def print_model(self):
+        """ Do possible visualization of trained model
+        """
+        pass
+
     def _train_model_if_needed(self, variables, random_state):
         """ Trains the model if variables have changed
         """
@@ -260,7 +265,7 @@ class RLModel(Model):
             self.prev_variables = variables
             self._precomp_obs_logprobs = dict()
             if self.verbose is True:
-                self.env.print_policy(self._get_optimal_policy(variables, random_state))
+                self.print_model()
 
     def _fill_path_tree(self, obs):
         """ Recursively fill path tree starting from obs

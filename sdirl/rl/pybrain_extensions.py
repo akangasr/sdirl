@@ -47,6 +47,8 @@ class ParametricLoggingEnvironment(Environment):
         self.state = None
         self.prev_state = None
         self.action = None
+        self.log_session_variables = list()  # logged at start of session
+        self.log_step_variables = list()  # logged after each step
 
     def setup(self, variables, random_state):
         """ Finishes the initialization
@@ -66,10 +68,12 @@ class ParametricLoggingEnvironment(Environment):
                 self.log["session"] += 1
                 self.log["sessions"].append(dict())
             self.step_data = self.log["sessions"][self.log["session"]]
-            self.step_data["grid"] = self.grid
-            self.step_data["start"] = self.start_loc_id
+            for varname in self.log_session_variables:
+                self.step_data[varname] = getattr(self, varname)
             self.step_data["path"] = Path([])
             self.step_data["rewards"] = list()
+            for varname in self.log_step_variables:
+                self.step_data[varname] = list()
 
     def _log_transition(self):
         """ Should be called after transition
@@ -77,6 +81,8 @@ class ParametricLoggingEnvironment(Environment):
         if self.log != None:
             self.step_data["path"].append(Transition(self.prev_state, self.action, self.state))
             self.step_data["rewards"].append(self.task.getReward())
+            for varname in self.log_step_variables:
+                self.step_data[varname].append(getattr(self, varname))
 
 
 class SparseActionValueTable(ActionValueTable):
@@ -128,10 +134,8 @@ class SparseActionValueTable(ActionValueTable):
                 return idx
         assert False
 
-    def check_bounds(self, row=None, column=None):
-        if row is not None and (row < 0):
-            raise ValueError("Row out of bounds (was {})".format(row))
-        if column is not None and (column < 0 or column >= self.n_actions):
+    def check_bounds(self, column=None):
+        if column < 0 or column >= self.n_actions:
             raise ValueError("Column out of bounds (was {})".format(column))
 
     def getValue(self, row, column):
@@ -146,7 +150,6 @@ class SparseActionValueTable(ActionValueTable):
             return self.initval
 
     def getActionValues(self, state):
-        self.check_bounds(state)
         if state is None:
             return None
         r = self.sparse_params.get(state, None)
@@ -156,7 +159,7 @@ class SparseActionValueTable(ActionValueTable):
         return r[:]
 
     def updateValue(self, row, column, value):
-        self.check_bounds(row, column)
+        self.check_bounds(column)
         if row is None or column is None:
             return
         r = self.getActionValues(row)

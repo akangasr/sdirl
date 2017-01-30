@@ -1,72 +1,82 @@
+import numpy as np
 
-from sdirl.model import RLModel
+from sdirl.menumodel.mdp import SearchEnvironment, SearchTask
+from sdirl.rl.simulator import RLSimulator
+from sdirl.model import RLModel, ELFIModel
 
-class MenuSearchModel(RLModel):
+import logging
+logger = logging.getLogger(__name__)
+
+class Observation():
+    """ Summary observation: task completion in one of the possible scenarios:
+        target absent or target present
+    """
+    def __init__(self, action_durations, target_present):
+        self.task_completion_time = sum(action_durations)
+        self.target_present = (target_present == True)
+
+    def __eq__(a, b):
+        return a.__hash__() == b.__hash__()
+
+    def __hash__(self):
+        return (self.task_completion_time, self.target_present).__hash__()
+
+    def __repr__(self):
+        return "O({},{})".format(self.task_completion_time, self.target_present)
+
+    def __str__(self):
+        return self.__repr__()
+
+
+class MenuSearchModel(RLModel, ELFIModel):
     """ Menu search model.
         From Chen et al. CHI 2016
-        Used in Kangasraasio et al. CHI 2017
+        Similar as in Kangasraasio et al. CHI 2017
     """
 
     def __init__(self,
                  variable_names,
+                 menu_type="semantic",
+                 menu_groups=2,
+                 menu_items_per_group=4,
+                 semantic_levels=3,
+                 gap_between_items=0.75,
+                 prop_target_absent=0.1,
+                 length_observations=True,
+                 p_obs_len_cur=0.95,
+                 p_obs_len_adj=0.89,
+                 n_training_menus=10000,
                  n_training_episodes=20000000,
                  n_episodes_per_epoch=20,
-                 n_simulation_episodes=10000):
-        super(MenuSearchModel, self).__init__(variable_names)
+                 n_simulation_episodes=10000,
+                 verbose=True):
+        super(MenuSearchModel, self).__init__(variable_names, verbose)
         env = SearchEnvironment(
-                    menu_type="semantic",
-                    menu_groups=2,
-                    menu_items_per_group=4,
-                    semantic_levels=3,
-                    gap_between_items=0.75,
-                    prop_target_absent=0.1,
-                    length_observations=True,
-                    p_obs_len_cur=0.95,
-                    p_obs_len_adj=0.89,
-                    n_training_menus=10000)
+                    menu_type=menu_type,
+                    menu_groups=menu_groups,
+                    menu_items_per_group=menu_items_per_group,
+                    semantic_levels=semantic_levels,
+                    gap_between_items=gap_between_items,
+                    prop_target_absent=prop_target_absent,
+                    length_observations=length_observations,
+                    p_obs_len_cur=p_obs_len_cur,
+                    p_obs_len_adj=p_obs_len_adj,
+                    n_training_menus=n_training_menus)
         task = SearchTask(
                     env=env,
                     max_number_of_actions_per_session=20)
-        self.rl = RLModel(
+        self.rl = RLSimulator(
                     n_training_episodes=n_training_episodes,
                     n_episodes_per_epoch=n_episodes_per_epoch,
                     n_simulation_episodes=n_simulation_episodes,
                     var_names=variable_names,
                     env=env,
                     task=task)
-        self.used_discrepancy_features = {
-            "00_task_completion_time": True,
-            "01_task_completion_time_target_absent": False,
-            "02_task_completion_time_target_present": False,
-            "03_fixation_duration_target_absent": False,
-            "04_fixation_duration_target_present": False,
-            "05_saccade_duration_target_absent": False,
-            "06_saccade_duration_target_present": False,
-            "07_number_of_saccades_target_absent": False,
-            "08_number_of_saccades_target_present": False,
-            "09_fixation_locations_target_absent": False,
-            "10_fixation_locations_target_present": False,
-            "11_length_of_skips_target_absent": False,
-            "12_length_of_skips_target_present": False,
-            "13_location_of_gaze_to_target": False,
-            "14_proportion_of_gaze_to_target": False
-            }
-        logger.info("Used discrepancy features: {}"
-                .format([v for v in used_discrepancy_features.keys() if used_discrepancy_features[v] is True]))
-
 
     def evaluate_likelihood(variables, observations, random_state=None):
         raise NotImplementedError("Very difficult to evaluate.")
 
-    def simulate_observations(variables, random_state):
-        raise NotImplementedError("Subclass implements")
-
-    def calculate_discrepancy(observations1, observations2):
-        features1 = feature_extraction(observations1)
-        features2 = feature_extraction(observations1)
-        discrepancy = Discrepancy(used_discrepancy_features=used_discrepancy_features)
-
-    def get-observation_dataset(menu_type="Semantic",
+    def get_observation_dataset(menu_type="Semantic",
                               allowed_users=list(),
                               excluded_users=list(),
                               trials_per_user_present=1,
@@ -80,43 +90,40 @@ class MenuSearchModel(RLModel):
                            trials_per_user_absent)
         return dataset.get()
 
+    def print_model(self):
+        pass
 
-    def old_inference_task():
-        """Returns a complete Menu model in inference task
+    def summarize(self, raw_observations):
+        return [self.summary(ses["action_duration"], ses["target_present"]) for ses in raw_observations["sessions"]]
 
-        Returns
-        -------
-        InferenceTask
+    @staticmethod
+    def summary(action_durations, target_present):
+        """ Returns a summary observation of the full path
         """
-        logger.info("Constructing ELFI model..")
-        itask = InferenceTask()
-        variables = list()
-        bounds = list()
-        var_names = list()
-        for var in inf_vars:
-            if var == "focus_dur":
-                v = elfi.Prior("focus_duration_100ms", "uniform", 1, 4, inference_task=itask)
-                b = (1, 4)
-            elif var == "recall_prob":
-                v = elfi.Prior("menu_recall_probability", "uniform", 0, 1, inference_task=itask)
-                b = (0, 1)
-            elif var == "semantic_obs":
-                v = elfi.Prior("prob_obs_adjacent", "uniform", 0, 1, inference_task=itask)
-                b = (0, 1)
-            elif var == "selection_delay":
-                v = elfi.Prior("selection_delay_s", "uniform", 0, 1, inference_task=itask)
-                b = (0, 1)
+        return Observation(action_durations, target_present)
+
+    def calculate_discrepancy(self, observations, sim_observations):
+        tct_mean_pre_obs, tct_std_pre_obs = self._tct_mean_std(present=True, obs=observations)
+        tct_mean_pre_sim, tct_std_pre_sim = self._tct_mean_std(present=True, obs=sim_observations)
+        tct_mean_abs_obs, tct_std_abs_obs = self._tct_mean_std(present=False, obs=observations)
+        tct_mean_abs_sim, tct_std_abs_sim = self._tct_mean_std(present=False, obs=sim_observations)
+        disc = np.abs(tct_mean_pre_obs - tct_mean_pre_sim) ** 2 \
+                + np.abs(tct_std_pre_obs - tct_std_pre_sim) \
+                + np.abs(tct_mean_abs_obs - tct_mean_abs_sim) ** 2 \
+                + np.abs(tct_std_abs_obs - tct_std_abs_sim)
+        disc /= 1000000.0  # scaling
+        return disc
+
+    def _tct_mean_std(self, present, obs):
+        tct = [o.task_completion_time for o in obs if o.target_present is present]
+        return np.mean(tct), np.std(tct)
+
+    def get_bounds(self):
+        ret = []
+        for v in self.variable_names:
+            if v == "focus_duration_100ms":
+                ret.append((1, 6))
             else:
-                assert False
-            name = v.name
-            logger.info("Added variable {}".format(name))
-            var_names.append(name)
-            variables.append(v)
-            bounds.append(b)
-
-        itask.parameters = variables
-        itask.bounds = bounds
-        logger.info("ELFI model done")
-        return itask
-
+                raise ValueError
+        return tuple(ret)
 

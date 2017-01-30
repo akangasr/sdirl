@@ -2,7 +2,7 @@ import math
 import numpy as np
 from enum import IntEnum
 
-from sdirl.rl.utils import vec_state_to_scalar, InitialStateGenerator
+from sdirl.rl.utils import InitialStateGenerator
 from sdirl.rl.utils import Transition
 from sdirl.rl.pybrain_extensions import ParametricLoggingEpisodicTask, ParametricLoggingEnvironment
 
@@ -99,7 +99,6 @@ class GridWorldTask(ParametricLoggingEpisodicTask):
         super(GridWorldTask, self).__init__(env)
 
         self.goal_value = 1.0
-        self.env.task = self
         self.max_number_of_actions_per_session = max_number_of_actions_per_session
         self.step_penalty = step_penalty
 
@@ -108,9 +107,6 @@ class GridWorldTask(ParametricLoggingEpisodicTask):
                 "max_number_of_actions_per_session": self.max_number_of_actions_per_session,
                 "step_penalty": step_penalty
                 }
-
-    def setup(self, variables):
-        self.v = variables
 
     def calculate_value(self, state):
         features = self.env.get_state_features(state)
@@ -173,6 +169,7 @@ class GridWorldEnvironment(ParametricLoggingEnvironment):
         self.initial_state_generator = initial_state_generator
         self.actions = [Action.UP, Action.DOWN, Action.LEFT, Action.RIGHT]
         self.grid = self._generate_grid()
+        self.log_session_variables = ["grid", "start_loc_id"]
 
         # pybrain variables
         self.discreteStates = True
@@ -225,6 +222,9 @@ class GridWorldEnvironment(ParametricLoggingEnvironment):
             for y in range(self.grid_size):
                 s.append("{}".format(self.grid[State(x, y)]))
             logger.info("".join(s))
+
+    def print_model(self):
+        self.env.print_policy(self._get_optimal_policy(variables, random_state))
 
     def print_policy(self, policy):
         """ Visualizes policy
