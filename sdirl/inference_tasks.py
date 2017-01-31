@@ -5,6 +5,7 @@ import random
 import json
 import GPy
 import time
+from copy import deepcopy
 
 import elfi
 from elfi import InferenceTask
@@ -127,7 +128,7 @@ class BOLFI_ML():
     def _construct_BOLFI(self, model, approximate):
         """ Constructs bolfi inference, returns it and store
         """
-        wrapper = BOLFIModelWrapper(model, self.obs, approximate=approximate)
+        wrapper = BOLFIModelWrapper(deepcopy(model), deepcopy(self.obs), approximate=approximate)
         bolfi, store = wrapper.construct_BOLFI(n_surrogate_samples=self.bolfi_params.n_surrogate_samples,
                                                batch_size=self.bolfi_params.batch_size,
                                                client=self.client)
@@ -427,10 +428,11 @@ class BOLFIModelWrapper():
 
     def simulator(self, *variables, random_state=None):
         assert len(variables) == self.model.n_var, variables
+        model_copy = deepcopy(self.model)  # prevents any parallel execution fun-stuff, hopefully
         if self.approximate is False:
-            ret = self.model.evaluate_loglikelihood(variables, self.observations, random_state)
+            ret = model_copy.evaluate_loglikelihood(variables, self.observations, random_state)
         else:
-            ret = self.model.evaluate_discrepancy(variables, self.observations, random_state)
+            ret = model_copy.evaluate_discrepancy(variables, self.observations, random_state)
         return np.atleast_1d(ret)
 
     def discrepancy(self, data1, data2):

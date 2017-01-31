@@ -41,6 +41,6 @@ if __name__ == "__main__":
 
     file_dir_path = os.path.dirname(os.path.realpath(__file__))
     model_file = os.path.join(file_dir_path, "model.json")
-    write_json(model_file, model.to_dict())
+    write_json_file(model_file, model.to_dict())
     exp_file = os.path.join(file_dir_path, "experiment.json")
-    write_json(exp_file, exp.to_dict())
+    write_json_file(exp_file, exp.to_dict())
