@@ -6,11 +6,8 @@ slow = pytest.mark.skipif(
 from collections import defaultdict
 import numpy as np
 
-from sdirl.gridworldmodel.model import GridWorldModel, Observation
-from sdirl.gridworldmodel.mdp import InitialStateUniformlyAtEdge
-from sdirl.gridworldmodel.mdp import InitialStateUniformlyAnywhere
-from sdirl.gridworldmodel.mdp import GridWorldEnvironment
-from sdirl.gridworldmodel.mdp import State, Action
+from sdirl.gridworldmodel.model import *
+from sdirl.gridworldmodel.mdp import *
 from sdirl.rl.utils import Path, Transition
 
 def trivial_model(training_episodes=100):
@@ -64,7 +61,9 @@ def get_test_grid():
 class TestGridWorldEnvironment():
 
     def test_state_restriction_works_as_expected(self):
-        env = GridWorldEnvironment(grid_size=3, target_state=State(0,0))
+        env = GridWorldEnvironment(grid_size=3,
+                target_state=State(0,0),
+                grid_generator=UniformGrid())
         for state in [State(0, 0), State(0, 1), State(2, 2)]:
             rstate = env.restrict_state(state)
             assert rstate == state
@@ -76,7 +75,9 @@ class TestGridWorldEnvironment():
         assert rstate == State(2, 0)
 
     def test_returns_correct_number_of_state_transitions(self):
-        env = GridWorldEnvironment(grid_size=3, target_state=State(0,0))
+        env = GridWorldEnvironment(grid_size=3,
+                target_state=State(0,0),
+                grid_generator=UniformGrid())
         trans_center = env.get_transitions(State(1,1))
         assert len(trans_center) == 4*4
         trans_corner = env.get_transitions(State(2,0))
@@ -85,7 +86,10 @@ class TestGridWorldEnvironment():
     @slow
     def test_transition_functions_are_coherent(self):
         n_iters = 100000
-        env = GridWorldEnvironment(grid_size=3, target_state=State(0,0), prob_rnd_move=0.3)
+        env = GridWorldEnvironment(grid_size=3,
+                target_state=State(0,0),
+                prob_rnd_move=0.3,
+                grid_generator=UniformGrid())
         env.random_state = np.random.RandomState(4)
         for init_state in [State(1,1), State(0,0), State(1,2)]:
             next_states = set([t.next_state for t in env.get_transitions(init_state)])

@@ -13,11 +13,7 @@ from unittest.mock import Mock
 
 import elfi
 
-from sdirl.inference_tasks import BOLFIModelWrapper
-from sdirl.inference_tasks import BolfiPosteriorUtility
-from sdirl.inference_tasks import BOLFI_ML_ComparisonExperiment
-from sdirl.inference_tasks import Environment
-from sdirl.inference_tasks import BolfiParams
+from sdirl.inference_tasks import *
 from sdirl.model import Model, SimpleGaussianModel
 
 from elfi.posteriors import BolfiPosterior
@@ -37,9 +33,9 @@ def create_simple_model_and_bolfi_inference(approximate):
     return bolfi, loc
 
 
-class TestBOLFI_ML_ComparisonExperiment():
+class TestBOLFI_Experiment():
 
-    def setup_method(self, method):
+    def setup_helper(self):
         self.env = Mock(Environment)
         rs = np.random.RandomState(0)
         self.env.setup = Mock(return_value=(rs, None))
@@ -48,7 +44,10 @@ class TestBOLFI_ML_ComparisonExperiment():
         self.model = SimpleGaussianModel(["mean"])
         self.ground_truth = [0]
         self.bolfi_params = BolfiParams(20, 1)
-        self.exp = BOLFI_ML_ComparisonExperiment(self.env,
+
+    def setup_method(self):
+        self.setup_helper()
+        self.exp = BOLFI_ML_Experiment(self.env,
                 self.seed,
                 self.cmdargs,
                 self.model,
@@ -57,6 +56,49 @@ class TestBOLFI_ML_ComparisonExperiment():
 
     def test_initialization_calls_environment_setup(self):
         assert self.env.setup.called
+
+
+class TestBOLFI_ML_SingleExperiment(TestBOLFI_Experiment):
+
+    def setup_method(self):
+        self.setup_helper()
+        self.exp1 = BOLFI_ML_SingleExperiment(self.env,
+                self.seed,
+                self.cmdargs,
+                self.model,
+                self.ground_truth,
+                self.bolfi_params,
+                approximate=True)
+        self.exp2 = BOLFI_ML_SingleExperiment(self.env,
+                self.seed,
+                self.cmdargs,
+                self.model,
+                self.ground_truth,
+                self.bolfi_params,
+                approximate=False)
+
+    @slow  # ~5min
+    def test_running_generates_reasonable_results(self):
+        self.exp1.run()
+        assert np.abs(self.exp1.results["results"].posteriors[-1].ML[0] - self.ground_truth[0]) < 0.1
+        assert self.exp1.results["results"].errors[-1] < 0.1
+        assert self.exp1.results["results"].duration > 1e-3
+        self.exp2.run()
+        assert np.abs(self.exp2.results["results"].posteriors[-1].ML[0] - self.ground_truth[0]) < 0.1
+        assert self.exp2.results["results"].errors[-1] < 0.1
+        assert self.exp2.results["results"].duration > 1e-3
+
+
+class TestBOLFI_ML_ComparisonExperiment(TestBOLFI_Experiment):
+
+    def setup_method(self):
+        self.setup_helper()
+        self.exp = BOLFI_ML_ComparisonExperiment(self.env,
+                self.seed,
+                self.cmdargs,
+                self.model,
+                self.ground_truth,
+                self.bolfi_params)
 
     @slow  # ~5min
     def test_running_generates_reasonable_results(self):

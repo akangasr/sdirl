@@ -133,7 +133,7 @@ class RLSimulator():
         self.agent.learner.explorer = EGreedyExplorer(epsilon=0, decay=1, random_state=random_state)
         self.agent.learner.explorer.module = self.agent.module
         # activate logging
-        self.task.env.log = dict()
+        self.task.env.start_logging()
 
         # simulate behavior
         self.experiment.doEpisodes(self.n_simulation_episodes)
@@ -141,7 +141,7 @@ class RLSimulator():
         dataset = self.task.env.log
 
         # deactivate logging
-        self.task.env.log = None
+        self.task.env.end_logging()
         # reactivate exploration
         self.agent.learner.explorer = explorer
         # reactivate learning for experiment

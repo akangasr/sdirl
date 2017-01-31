@@ -51,7 +51,7 @@ class MenuSearchModel(RLModel, ELFIModel):
                  n_simulation_episodes=10000,
                  verbose=True):
         super(MenuSearchModel, self).__init__(variable_names, verbose)
-        env = SearchEnvironment(
+        self.env = SearchEnvironment(
                     menu_type=menu_type,
                     menu_groups=menu_groups,
                     menu_items_per_group=menu_items_per_group,
@@ -62,16 +62,16 @@ class MenuSearchModel(RLModel, ELFIModel):
                     p_obs_len_cur=p_obs_len_cur,
                     p_obs_len_adj=p_obs_len_adj,
                     n_training_menus=n_training_menus)
-        task = SearchTask(
-                    env=env,
+        self.task = SearchTask(
+                    env=self.env,
                     max_number_of_actions_per_session=20)
         self.rl = RLSimulator(
                     n_training_episodes=n_training_episodes,
                     n_episodes_per_epoch=n_episodes_per_epoch,
                     n_simulation_episodes=n_simulation_episodes,
                     var_names=variable_names,
-                    env=env,
-                    task=task)
+                    env=self.env,
+                    task=self.task)
 
     def evaluate_likelihood(variables, observations, random_state=None):
         raise NotImplementedError("Very difficult to evaluate.")

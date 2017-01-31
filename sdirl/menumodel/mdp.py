@@ -113,7 +113,7 @@ class Action(IntEnum):  # assume 8 items in menu
     LOOK_6 = 5
     LOOK_7 = 6
     LOOK_8 = 7
-    SELECT = 8
+    CLICK = 8
     QUIT = 9
 
 
@@ -246,7 +246,7 @@ class SearchEnvironment(ParametricLoggingEnvironment):
                 items[i].item_length = ItemLength.TARGET_LENGTH
             else:
                 items[i].item_length = ItemLength.NOT_TARGET_LENGTH
-        menu = (items, target_present, target_idx)
+        menu = (tuple(items), target_present, target_idx)
         if self.training is True:
             self.training_menus.append(menu)
         return menu
@@ -306,7 +306,7 @@ class SearchEnvironment(ParametricLoggingEnvironment):
                 state.obs_items = deepcopy(self.items)
 
         # observe items's state
-        if action != Action.SELECT and action != Action.QUIT:
+        if action != Action.CLICK and action != Action.QUIT:
             # saccade
             # item_locations are off-by-one to other lists
             amplitude = abs(self.item_locations[int(state.focus)+1] - self.item_locations[int(action)+1])
@@ -336,7 +336,7 @@ class SearchEnvironment(ParametricLoggingEnvironment):
                     state = self._observe_relevance_at(state, int(state.focus)+1)
 
         # choose item
-        elif action == Action.SELECT:
+        elif action == Action.CLICK:
             if state.focus != Focus.ABOVE_MENU:
                 state.click = Click(int(state.focus))  # assume these match
             else:

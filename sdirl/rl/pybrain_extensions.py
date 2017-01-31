@@ -57,6 +57,12 @@ class ParametricLoggingEnvironment(Environment):
         self.random_state = random_state
         self.reset()
 
+    def start_logging(self):
+        self.log = dict()
+
+    def end_logging(self):
+        self.log = None
+
     def _start_log_for_new_session(self):
         """ Set up log when new session starts
         """

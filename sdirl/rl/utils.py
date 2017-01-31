@@ -9,10 +9,10 @@ logger = logging.getLogger(__name__)
 """
 
 class InitialStateGenerator():
-    n_initial_states = 0  # number of possible initial states
 
     def __init__(self, grid_size):
         self.grid_size = grid_size
+        self.n_initial_states = 0  # number of possible initial states
 
     def get_random_initial_state_id(self, random_state):
         """ Returns a random intial state id
@@ -34,6 +34,8 @@ class InitialStateGenerator():
             in [0, n_initial_states)
         """
         raise NotImplementedError("Subclass implements")
+
+
 
 class Path():
     def __init__(self, transitions):

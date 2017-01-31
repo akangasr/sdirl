@@ -23,6 +23,7 @@ if __name__ == "__main__":
     n_episodes_per_epoch = 10
     n_simulation_episodes = 100
     initial_state = "edge"
+    grid_type = "walls"
     verbose = True
     model = GridWorldModel(variable_names,
         grid_size=grid_size,
@@ -33,8 +34,9 @@ if __name__ == "__main__":
         n_episodes_per_epoch=n_episodes_per_epoch,
         n_simulation_episodes=n_simulation_episodes,
         initial_state=initial_state,
+        grid_type=grid_type,
         verbose=verbose)
-    ground_truth = [-0.1, -0.3, -0.5]
+    ground_truth = [-0.1, -0.5, -0.9]
 
     bolfi_params = BolfiParams(
             n_surrogate_samples = 100,
@@ -49,7 +51,5 @@ if __name__ == "__main__":
     exp.run()
 
     file_dir_path = os.path.dirname(os.path.realpath(__file__))
-    model_file = os.path.join(file_dir_path, "model.json")
-    write_json_file(model_file, model.to_dict())
     exp_file = os.path.join(file_dir_path, "experiment.json")
     write_json_file(exp_file, exp.to_dict())

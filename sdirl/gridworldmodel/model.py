@@ -3,9 +3,7 @@ import numpy as np
 
 from sdirl.model import RLModel, ELFIModel
 from sdirl.rl.simulator import RLSimulator
-from sdirl.gridworldmodel.mdp import GridWorldEnvironment, GridWorldTask
-from sdirl.gridworldmodel.mdp import State
-from sdirl.gridworldmodel.mdp import InitialStateUniformlyAtEdge, InitialStateUniformlyAnywhere
+from sdirl.gridworldmodel.mdp import *
 
 import elfi
 from elfi.bo.gpy_model import GPyModel
@@ -58,6 +56,7 @@ class GridWorldModel(RLModel, ELFIModel):
             n_episodes_per_epoch=10,
             n_simulation_episodes=100,
             initial_state="edge",
+            grid_type="walls",
             verbose=False):
         super(GridWorldModel, self).__init__(variable_names, verbose)
 
@@ -66,6 +65,16 @@ class GridWorldModel(RLModel, ELFIModel):
             self.initial_state_generator = InitialStateUniformlyAtEdge(grid_size)
         elif self.initial_state == "anywhere":
             self.initial_state_generator = InitialStateUniformlyAnywhere(grid_size)
+        else:
+            raise ValueError("Unknown initial state type: {}".format(self.initial_state))
+
+        self.grid_type = grid_type
+        if self.grid_type == "uniform":
+            grid_generator = UniformGrid(world_seed, p_feature=0.4)
+        elif self.grid_type == "walls":
+            grid_generator = WallsGrid(world_seed, n_walls_per_feature=grid_size)
+        else:
+            raise ValueError("Unknown grid type: {}".format(self.grid_type))
 
         self.target_state = State(int(grid_size/2), int(grid_size/2))
         self.path_max_len = grid_size*3
@@ -73,9 +82,9 @@ class GridWorldModel(RLModel, ELFIModel):
                     grid_size=grid_size,
                     prob_rnd_move=prob_rnd_move,
                     n_features=len(variable_names),
-                    world_seed=world_seed,
                     target_state=self.target_state,
-                    initial_state_generator=self.initial_state_generator
+                    initial_state_generator=self.initial_state_generator,
+                    grid_generator=grid_generator
                     )
         self.task = GridWorldTask(
                     env=self.env,
@@ -94,6 +103,7 @@ class GridWorldModel(RLModel, ELFIModel):
     def to_dict(self):
         ret = super(GridWorldModel, self).to_dict()
         ret["initial_state"] = self.initial_state
+        ret["grid_type"] = self.grid_type
         return ret
 
     def summarize(self, raw_observations):

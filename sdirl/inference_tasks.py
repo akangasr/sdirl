@@ -34,11 +34,11 @@ class BolfiPosteriorUtility():
         # hack
         model = posterior.model
         data = {
-            "X_params": model.gp.X.tolist(),
-            "Y_disc": model.gp.Y.tolist(),
-            "kernel_class": model.kernel_class.__name__,  # assume set
-            "kernel_var": model.kernel_var,  # assume set
-            "kernel_scale": model.kernel_scale,  # assume set
+            "X_params": model.gp.X.tolist() if model.gp is not None else [],
+            "Y_disc": model.gp.Y.tolist() if model.gp is not None else [],
+            "kernel_class": model.kernel.__class__.__name__,
+            "kernel_var": float(model.kernel.variance),
+            "kernel_scale": float(model.kernel.lengthscale),
             "noise_var": model.noise_var,
             "threshold": posterior.threshold,
             "bounds": model.bounds,
@@ -89,8 +89,8 @@ class BolfiParams():
         self.n_surrogate_samples = n_surrogate_samples
         self.batch_size = batch_size
 
-class BOLFI_ML():
-    """ Base class for BOLFI ML experiments
+class BOLFI_Experiment():
+    """ Base class for BOLFI experiments
 
     Parameters
     ----------
@@ -123,7 +123,7 @@ class BOLFI_ML():
         """ Generate observations for the inference task
         """
         logger.info("Simulating observations at {} ..".format(self.ground_truth))
-        self.obs = self.model.simulate_observations(self.ground_truth, self.rs)
+        self.obs = deepcopy(self.model).simulate_observations(self.ground_truth, self.rs)
 
     def _construct_BOLFI(self, model, approximate):
         """ Constructs bolfi inference, returns it and store
@@ -135,8 +135,9 @@ class BOLFI_ML():
         return bolfi, store
 
     def _calculate_errors(self, posterior):
-        """ Calculates error in ML estimate
+        """ Calculates error in results
         """
+        raise NotImplementedError
         return np.linalg.norm(np.array(self.ground_truth) - posterior.ML, ord=2)
 
     def _run_inference(self, approximate):
@@ -175,8 +176,7 @@ class BOLFI_ML():
             "model": self.model.to_dict(),
             "ground_truth": self.ground_truth,
             "bolfi_params": self.bolfi_params.__dict__,
-            "obs_class": "" if len(self.obs) == 0 else self.obs[0].__class__.__name__,
-            "obs": [o.to_dict() for o in self.obs],
+            "obs": [o for o in self.obs],
             "results": self._serialized_results(),
             }
 
@@ -189,11 +189,17 @@ class BOLFI_ML():
         bolfi_params = BolfiParams()
         bolfi_params.__dict__ = data["bolfi_params"]
         exp = BOLFI_ML_ComparisonExperiment(seed, cmdargs, model, ground_truth, bolfi_params)
-        if len(data["obs_class"]) > 0:
-            obs_class = eval(data["obs_class"])
-            exp.obs = [obs_class.from_dict(j) for j in data["obs"]]
+        exp.obs = data["obs"]
         exp._deserialize_results(data["results"])
         return exp
+
+
+class BOLFI_ML_Experiment(BOLFI_Experiment):
+
+    def _calculate_errors(self, posterior):
+        """ Calculates L2 ML error
+        """
+        return np.linalg.norm(np.array(self.ground_truth) - posterior.ML, ord=2)
 
 
 class BOLFIExperimentResults():
@@ -217,7 +223,7 @@ class BOLFIExperimentResults():
 
     def to_dict(self):
         return {
-                "posteriors": [BolfiPosteriorUtility.to_dict(p) for p in self.results["posteriors_disc"]],
+                "posteriors": [BolfiPosteriorUtility.to_dict(p) for p in self.posteriors],
                 "errors": self.errors,
                 "duration": self.duration,
                 }
@@ -230,7 +236,7 @@ class BOLFIExperimentResults():
         return BOLFIExperimentResults(posteriors, errors, duration)
 
 
-class BOLFI_ML_Experiment(BOLFI_ML):
+class BOLFI_ML_SingleExperiment(BOLFI_ML_Experiment):
     """ Experiment where we have one method for inferring the ML estimate of a model:
         approximate or exact likelihood maximization
 
@@ -253,7 +259,7 @@ class BOLFI_ML_Experiment(BOLFI_ML):
                 }
 
 
-class BOLFI_ML_ComparisonExperiment(BOLFI_ML):
+class BOLFI_ML_ComparisonExperiment(BOLFI_ML_Experiment):
     """ Experiment where we have two competing methods for inferring the ML estimate of a model
         using the exact same set of observations: approximate and exact likelihood maximization
     """
