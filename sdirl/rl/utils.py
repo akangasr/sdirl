@@ -75,11 +75,15 @@ class Path():
     def __str__(self):
         return self.__repr__()
 
+    def copy(self):
+        return Path([transition.copy() for transition in self.transitions])
+
+
 class Transition():
     def __init__(self, prev_state, action, next_state):
-        self.prev_state = prev_state
-        self.action = action
-        self.next_state = next_state
+        self.prev_state = prev_state  # assume object
+        self.action = action  # assume enum
+        self.next_state = next_state  # assume object
 
     def __eq__(a, b):
         return a.__hash__() == b.__hash__()
@@ -92,6 +96,9 @@ class Transition():
 
     def __str__(self):
         return self.__repr__()
+
+    def copy(self):
+        return Transition(self.prev_state.copy(), self.action, self.next_state.copy())
 
 
 class PathTreeIterator():

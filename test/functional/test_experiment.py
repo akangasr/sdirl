@@ -6,7 +6,7 @@ slow = pytest.mark.skipif(
 import os
 from sdirl.run_test import run
 
-@slow 
+@slow
 def test_test_experiment_can_be_run():
     file_dir_path = os.path.dirname(os.path.realpath(__file__))
     run(file_dir_path)

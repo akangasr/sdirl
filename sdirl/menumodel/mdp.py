@@ -1,6 +1,5 @@
 import math
 import numpy as np
-from copy import deepcopy
 from enum import IntEnum
 
 from sdirl.rl.pybrain_extensions import ParametricLoggingEpisodicTask, ParametricLoggingEnvironment
@@ -42,6 +41,9 @@ class State():
     def __str__(self):
         return self.__repr__()
 
+    def copy(self):
+        return State([item.copy() for item in self.obs_items], self.focus, self.click, self.quit)
+
 class ItemRelevance(IntEnum):
     NOT_OBSERVED = 0
     TARGET_RELEVANCE = 1  # 1.0
@@ -77,6 +79,9 @@ class MenuItem():
 
     def __str__(self):
         return self.__repr__()
+
+    def copy(self):
+        return MenuItem(self.item_relevance, self.item_length)
 
 class Quit(IntEnum):
     NOT_QUIT = 0
@@ -263,7 +268,7 @@ class SearchEnvironment(ParametricLoggingEnvironment):
         click = Click.NOT_CLICKED
         quit = Quit.NOT_QUIT
         self.state = State(obs_items, focus, click, quit)
-        self.prev_state = deepcopy(self.state)
+        self.prev_state = self.state.copy()
 
         # misc environment state variables
         self.action_duration = None
@@ -274,7 +279,7 @@ class SearchEnvironment(ParametricLoggingEnvironment):
     def performAction(self, action):
         """ Changes the state of the environment based on agent action """
         self.action = Action(int(action[0]))
-        self.prev_state = deepcopy(self.state)
+        self.prev_state = self.state.copy()
         self.state, self.action_duration = self.do_transition(self.state, self.action)
         self.n_actions += 1
         self._log_transition()
@@ -303,7 +308,7 @@ class SearchEnvironment(ParametricLoggingEnvironment):
         # menu recall event may happen at first action
         if self.n_actions == 0:
             if "menu_recall_probability" in self.v and self.random_state.rand() < float(self.v["menu_recall_probability"]):
-                state.obs_items = deepcopy(self.items)
+                state.obs_items = [item.copy() for item in self.items]
 
         # observe items's state
         if action != Action.CLICK and action != Action.QUIT:

@@ -30,6 +30,9 @@ class State():
     def __str__(self):
         return self.__repr__()
 
+    def copy(self):
+        return State(self.x, self.y)
+
 
 class Action(IntEnum):
     UP = 0

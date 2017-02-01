@@ -27,6 +27,9 @@ class Observation():
     def __str__(self):
         return self.__repr__()
 
+    def copy(self):
+        return Observation(self.task_completion_time, self.target_present)
+
 
 class MenuSearchModel(RLModel, ELFIModel):
     """ Menu search model.

@@ -36,6 +36,9 @@ class Observation():
     def __str__(self):
         return self.__repr__()
 
+    def copy(self):
+        return Observation(self.start_state.copy(), self.path_len)
+
 
 class GridWorldModel(RLModel, ELFIModel):
     """ Grid world model
