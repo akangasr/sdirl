@@ -243,7 +243,7 @@ class BOLFIExperimentResults():
 
     def plot_errors(self, pdf, figsize):
         fig = pl.figure(figsize=figsize)
-        t = range(1, len(self.errors)+1)
+        t = range(len(self.errors))
         pl.plot(t, self.errors)
         pl.xlabel("BO samples")
         pl.ylabel("L2 error in ML estimate")
@@ -366,14 +366,16 @@ class Environment():
     Parameters
     ----------
     variant : string
-        "slurm" : cluster environment
-        "local" : local workstation
+        "distributed" : separate dask.distributed scheduler
+        "local" : default scheduler
     """
     def __init__(self, variant):
         self.variant = variant
-        if self.variant == "slurm":
-            logger.info("SLURM environment setup")
-            self.setup = Environment.setup_slurm
+        Environment.logging_setup()
+        Environment.disable_pybrain_warnings()
+        if self.variant == "distributed":
+            logger.info("DISTRIBUTED environment setup")
+            self.setup = Environment.setup_distributed
         if self.variant == "local":
             logger.info("LOCAL environment setup")
             self.setup = Environment.setup_local
@@ -383,30 +385,19 @@ class Environment():
 
     @staticmethod
     def setup_local(seed, args):
-        """ Default experiment setup for local workstation
+        """ Default experiment setup for local
         """
-        Environment.logging_setup()
-        Environment.disable_pybrain_warnings()
         rs = Environment.random_seed_setup(seed)
         client = None
         return rs, client
 
     @staticmethod
-    def setup_slurm(seed, args):
-        """ Default experiment setup for slurm cluster
+    def setup_distributed(seed, args):
+        """ Default experiment setup for distributed
         """
-        Environment.logging_setup()
-        Environment.setup_matplotlib_backend_no_xenv()
-        Environment.disable_pybrain_warnings()
         rs = Environment.random_seed_setup(seed)
         client = Environment.dask_client_setup(args)
         return rs, client
-
-    def setup_matplotlib_backend_no_xenv():
-        """ Set matplotlib backend to Agg, which works when we don't have X-env
-        """
-        import matplotlib
-        matplotlib.use('Agg')
 
     def disable_pybrain_warnings():
         """ Ignore warnings from output

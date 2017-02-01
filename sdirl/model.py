@@ -204,6 +204,7 @@ class RLModel(Model):
         ind_log_obs_probs = list()
         policy = self._get_optimal_policy(variables, random_state)
         for obs_i in observations:
+            logger.info("Evaluating likelihood of {}".format(obs_i))
             if obs_i in self._precomp_obs_logprobs.keys():
                 logprob = self._precomp_obs_logprobs[obs_i]
                 ind_log_obs_probs.append(logprob)

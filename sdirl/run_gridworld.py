@@ -2,6 +2,9 @@ import os
 import sys
 import time
 
+import matplotlib
+matplotlib.use('Agg')
+
 from sdirl.inference_tasks import *
 from sdirl.gridworldmodel.model import GridWorldModel
 
@@ -16,10 +19,10 @@ if __name__ == "__main__":
 
     variable_names = ["feature1_value", "feature2_value", "feature3_value"]
     grid_size = 5
-    step_penalty = 0.05
+    step_penalty = 0.1
     prob_rnd_move = 0.05
     world_seed = 1234
-    n_training_episodes = 50000
+    n_training_episodes = 100000
     n_episodes_per_epoch = 10
     n_simulation_episodes = 100
     initial_state = "edge"
@@ -53,5 +56,5 @@ if __name__ == "__main__":
     file_dir_path = os.path.dirname(os.path.realpath(__file__))
     exp_file = os.path.join(file_dir_path, "experiment.json")
     write_json_file(exp_file, exp.to_dict())
-    pdf_file = os.path.join(location, "results.pdf")
+    pdf_file = os.path.join(file_dir_path, "results.pdf")
     write_report_file(pdf_file, exp)

@@ -2,6 +2,9 @@ import os
 import sys
 import time
 
+import matplotlib
+matplotlib.use('Agg')
+
 from sdirl.inference_tasks import *
 from sdirl.menumodel.model import MenuSearchModel
 
@@ -42,5 +45,5 @@ if __name__ == "__main__":
     file_dir_path = os.path.dirname(os.path.realpath(__file__))
     exp_file = os.path.join(file_dir_path, "experiment.json")
     write_json_file(exp_file, exp.to_dict())
-    pdf_file = os.path.join(location, "results.pdf")
+    pdf_file = os.path.join(file_dir_path, "results.pdf")
     write_report_file(pdf_file, exp)
