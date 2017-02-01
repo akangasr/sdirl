@@ -15,7 +15,7 @@ if __name__ == "__main__":
     cmdargs = sys.argv
 
     variable_names = ["focus_duration_100ms"]
-    n_training_episodes = 1000000
+    n_training_episodes = 20000000
     n_episodes_per_epoch = 10
     n_simulation_episodes = 10000
     verbose = True
@@ -28,7 +28,7 @@ if __name__ == "__main__":
 
     bolfi_params = BolfiParams(
             n_surrogate_samples = 100,
-            batch_size = 4)
+            batch_size = 10)
 
     exp = BOLFI_ML_SingleExperiment(env,
             seed,

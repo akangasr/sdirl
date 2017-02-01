@@ -68,6 +68,12 @@ class InitialStateUniformlyAtEdge(InitialStateGenerator):
                     .format(id_number, lim*4))
         return State(x, y)
 
+    def to_dict(self):
+        ret = super(InitialStateUniformlyAtEdge, self).to_dict()
+        ret["class"] = self.__class__.__name__
+        ret["n_initial_states"] = self.n_initial_states
+        return ret
+
 
 class InitialStateUniformlyAnywhere(InitialStateGenerator):
     """ Returns a state randomly from the grid, except for the center
@@ -91,6 +97,12 @@ class InitialStateUniformlyAnywhere(InitialStateGenerator):
             y = self.grid_size - 1
         return State(x, y)
 
+    def to_dict(self):
+        ret = super(InitialStateUniformlyAnywhere, self).to_dict()
+        ret["class"] = self.__class__.__name__
+        ret["n_initial_states"] = self.n_initial_states
+        return ret
+
 
 class GridGenerator():
 
@@ -101,6 +113,12 @@ class GridGenerator():
         """ Returns grid as a dict[state] = f_vec
         """
         raise NotImplementedError
+
+    def to_dict(self):
+        return {
+                "class": self.__class__.__name__,
+                "world_seed": self.world_seed,
+                }
 
 
 class Grid():
@@ -141,6 +159,14 @@ class Grid():
         del s[-1]
         return "".join(s)
 
+    def to_dict(self):
+        return {
+                "class": self.__class__.__name__,
+                "grid_size": self.grid_size,
+                "n_features": self.n_features,
+                "grid": str(self),
+                }
+
 
 class UniformGrid(GridGenerator):
 
@@ -172,6 +198,12 @@ class UniformGrid(GridGenerator):
                             features.append(0)
                 grid[state] = features
         return grid
+
+    def to_dict(self):
+        ret = super(UniformGrid, self).to_dict()
+        ret["class"] = self.__class__.__name__,
+        ret["p_feature"] = self.p_feature
+        return ret
 
 
 class WallsGrid(GridGenerator):
@@ -206,6 +238,12 @@ class WallsGrid(GridGenerator):
         grid[target_state] = [1] + [0]*n_features
         return grid
 
+    def to_dict(self):
+        ret = super(WallsGrid, self).to_dict()
+        ret["class"] = self.__class__.__name__,
+        ret["n_walls_per_feature"] = self.n_walls_per_feature
+        return ret
+
 
 class GridWorldTask(ParametricLoggingEpisodicTask):
 
@@ -219,7 +257,7 @@ class GridWorldTask(ParametricLoggingEpisodicTask):
     def to_dict(self):
         return {
                 "max_number_of_actions_per_session": self.max_number_of_actions_per_session,
-                "step_penalty": step_penalty
+                "step_penalty": self.step_penalty
                 }
 
     def calculate_value(self, state):
@@ -295,11 +333,14 @@ class GridWorldEnvironment(ParametricLoggingEnvironment):
 
     def to_dict(self):
         return {
+                "class": self.__class__.__name__,
                 "grid_size": self.grid_size,
+                "grid": self.grid.to_dict(),
                 "prob_rnd_move": self.prob_rnd_move,
                 "n_features": self.n_features,
-                "world_seed": self.world_seed,
-                "target_state": self.target_state,
+                "initial_state_generator": self.initial_state_generator.to_dict(),
+                "grid_generator": self.grid_generator.to_dict(),
+                "target_state": str(self.target_state),
                 }
 
     def print_grid(self):

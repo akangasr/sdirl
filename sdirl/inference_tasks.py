@@ -176,7 +176,7 @@ class BOLFI_Experiment():
             "model": self.model.to_dict(),
             "ground_truth": self.ground_truth,
             "bolfi_params": self.bolfi_params.__dict__,
-            "obs": [o for o in self.obs],
+            "obs": [str(o) for o in self.obs],
             "results": self._serialized_results(),
             }
 
@@ -189,7 +189,7 @@ class BOLFI_Experiment():
         bolfi_params = BolfiParams()
         bolfi_params.__dict__ = data["bolfi_params"]
         exp = BOLFI_ML_ComparisonExperiment(seed, cmdargs, model, ground_truth, bolfi_params)
-        exp.obs = data["obs"]
+        exp.obs = data["obs"]  # TODO: proper serialization of results
         exp._deserialize_results(data["results"])
         return exp
 

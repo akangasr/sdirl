@@ -39,8 +39,8 @@ if __name__ == "__main__":
     ground_truth = [-0.1, -0.5, -0.9]
 
     bolfi_params = BolfiParams(
-            n_surrogate_samples = 100,
-            batch_size = 4)
+            n_surrogate_samples = 300,
+            batch_size = 10)
 
     exp = BOLFI_ML_SingleExperiment(env,
             seed,

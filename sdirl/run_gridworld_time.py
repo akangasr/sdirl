@@ -8,18 +8,17 @@ from sdirl.gridworldmodel.model import GridWorldModel
 import logging
 logger = logging.getLogger(__name__)
 
-if __name__ == "__main__":
 
+def run(grid_size):
     env = Environment(variant="local")
-    seed = 123987123
+    seed = 12353
     cmdargs = sys.argv
 
-    variable_names = ["feature1_value", "feature2_value", "feature3_value"]
-    grid_size = 5
-    step_penalty = 0.05
-    prob_rnd_move = 0.05
+    variable_names = ["feature1_value"]
+    step_penalty = 0.1
+    prob_rnd_move = 0.00
     world_seed = 1234
-    n_training_episodes = 50000
+    n_training_episodes = 10000
     n_episodes_per_epoch = 10
     n_simulation_episodes = 100
     initial_state = "edge"
@@ -36,11 +35,11 @@ if __name__ == "__main__":
         initial_state=initial_state,
         grid_type=grid_type,
         verbose=verbose)
-    ground_truth = [-0.1, -0.5, -0.9]
+    ground_truth = [0.0]
 
     bolfi_params = BolfiParams(
-            n_surrogate_samples = 200,
-            batch_size = 10)
+            n_surrogate_samples = 1,
+            batch_size = 1)
 
     exp = BOLFI_ML_ComparisonExperiment(env,
             seed,
@@ -51,5 +50,11 @@ if __name__ == "__main__":
     exp.run()
 
     file_dir_path = os.path.dirname(os.path.realpath(__file__))
-    exp_file = os.path.join(file_dir_path, "experiment.json")
+    exp_file = os.path.join(file_dir_path, "experiment_{}.json".format(grid_size))
     write_json_file(exp_file, exp.to_dict())
+
+if __name__ == "__main__":
+    run(3)
+    run(5)
+    run(7)
+    run(9)

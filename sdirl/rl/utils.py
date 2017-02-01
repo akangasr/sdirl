@@ -35,6 +35,12 @@ class InitialStateGenerator():
         """
         raise NotImplementedError("Subclass implements")
 
+    def to_dict(self):
+        return {
+                "class": self.__class__.__name__,
+                "grid_size": self.grid_size,
+                "n_initial_states": self.n_initial_states,
+                }
 
 
 class Path():
