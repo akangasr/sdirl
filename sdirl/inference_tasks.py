@@ -16,6 +16,9 @@ from elfi.posteriors import BolfiPosterior
 import dask
 from distributed import Client
 
+from matplotlib import pyplot as pl
+from matplotlib.backends.backend_pdf import PdfPages
+
 import logging
 logger = logging.getLogger(__name__)
 
@@ -168,6 +171,17 @@ class BOLFI_Experiment():
         for k, v in ser_res.items():
             self.results[k] = BOLFIExperimentResults.from_dict(v)
 
+    def print_results(self, pdf, figsize):
+        """ Print results into a pdf
+        """
+        raise NotImplementedError
+
+    def _print_text_page(self, pdf, figsize, text):
+        fig = pl.figure(figsize=figsize)
+        fig.text(0.02, 0.01, text)
+        pdf.savefig()
+        pl.close()
+
     def to_dict(self):
         return {
             "seed": self.seed,
@@ -221,6 +235,41 @@ class BOLFIExperimentResults():
                     st.append(" ")
             logger.info("".join(st))
 
+    def plot_info(self, pdf, figsize):
+        fig = pl.figure(figsize=figsize)
+        fig.text(0.02, 0.01, "Duration: {} seconds".format(self.duration))
+        pdf.savefig()
+        pl.close()
+
+    def plot_errors(self, pdf, figsize):
+        fig = pl.figure(figsize=figsize)
+        t = range(1, len(self.errors)+1)
+        pl.plot(t, self.errors)
+        pl.xlabel("BO samples")
+        pl.ylabel("L2 error in ML estimate")
+        pl.title("Reduction in error over time")
+        pdf.savefig()
+        pl.close()
+
+    def plot_posteriors(self, pdf, figsize):
+        for posterior in self.posteriors:
+            self.plot_posterior(pdf, figsize, posterior)
+
+    def plot_posterior(self, pdf, figsize, posterior):
+        if posterior.model.gp is None:
+            return
+        if posterior.model.input_dim not in [1, 2]:
+            return
+        fig = pl.figure(figsize=figsize)
+        posterior.model.gp.plot()
+        pdf.savefig()
+        pl.close()
+
+    def plot_pdf(self, pdf, figsize):
+        self.plot_info(pdf, figsize)
+        self.plot_errors(pdf, figsize)
+        self.plot_posteriors(pdf, figsize)
+
     def to_dict(self):
         return {
                 "posteriors": [BolfiPosteriorUtility.to_dict(p) for p in self.posteriors],
@@ -258,6 +307,13 @@ class BOLFI_ML_SingleExperiment(BOLFI_ML_Experiment):
                 "results": results,
                 }
 
+    def print_results(self, pdf, figsize):
+        if self.approximate is True:
+            self._print_text_page(pdf, figsize, "Approximate inference")
+        else:
+            self._print_text_page(pdf, figsize, "Exact inference")
+        self.results["results"].plot_pdf(pdf, figsize)
+
 
 class BOLFI_ML_ComparisonExperiment(BOLFI_ML_Experiment):
     """ Experiment where we have two competing methods for inferring the ML estimate of a model
@@ -277,6 +333,18 @@ class BOLFI_ML_ComparisonExperiment(BOLFI_ML_Experiment):
                 "results_logl": results_logl,
                 }
 
+    def print_results(self, pdf, figsize):
+        self._print_text_page(pdf, figsize, "Approximate inference")
+        self.results["results_disc"].plot_pdf(pdf, figsize)
+        self._print_text_page(pdf, figsize, "Exact inference")
+        self.results["results_logl"].plot_pdf(pdf, figsize)
+
+
+def write_report_file(filename, experiment):
+    figsize = (8.27, 11.69)  # A4 portrait
+    with PdfPages(filename) as pdf:
+        experiment.print_results(pdf, figsize)
+    logger.info("Wrote {}".format(filename))
 
 def write_json_file(filename, data):
     f = open(filename, "w")
