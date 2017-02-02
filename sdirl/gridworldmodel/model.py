@@ -80,7 +80,7 @@ class GridWorldModel(RLModel, ELFIModel):
             raise ValueError("Unknown grid type: {}".format(self.grid_type))
 
         self.target_state = State(int(grid_size/2), int(grid_size/2))
-        self.path_max_len = grid_size*3
+        self.path_max_len = grid_size*2
         self.env = GridWorldEnvironment(
                     grid_size=grid_size,
                     prob_rnd_move=prob_rnd_move,
