@@ -43,7 +43,8 @@ if __name__ == "__main__":
 
     bolfi_params = BolfiParams(
             n_surrogate_samples = 200,
-            batch_size = 10)
+            batch_size = 10,
+            sync = False)
 
     exp = BOLFI_ML_ComparisonExperiment(env,
             seed,

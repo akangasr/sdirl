@@ -18,7 +18,8 @@ def run(location):
 
     bolfi_params = BolfiParams(
             n_surrogate_samples = 20,
-            batch_size = 2)
+            batch_size = 2,
+            sync = True)
 
     exp = BOLFI_ML_SingleExperiment(env,
             seed,

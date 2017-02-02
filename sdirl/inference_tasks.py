@@ -88,9 +88,10 @@ class BolfiPosteriorUtility():
 class BolfiParams():
     """ Encapsulates BOLFI parameters
     """
-    def __init__(self, n_surrogate_samples, batch_size):
+    def __init__(self, n_surrogate_samples=1, batch_size=1, sync=True):
         self.n_surrogate_samples = n_surrogate_samples
         self.batch_size = batch_size
+        self.sync = sync
 
 class BOLFI_Experiment():
     """ Base class for BOLFI experiments
@@ -134,7 +135,8 @@ class BOLFI_Experiment():
         wrapper = BOLFIModelWrapper(deepcopy(model), deepcopy(self.obs), approximate=approximate)
         bolfi, store = wrapper.construct_BOLFI(n_surrogate_samples=self.bolfi_params.n_surrogate_samples,
                                                batch_size=self.bolfi_params.batch_size,
-                                               client=self.client)
+                                               client=self.client,
+                                               sync=self.bolfi_params.sync)
         return bolfi, store
 
     def _calculate_errors(self, posterior):
@@ -463,7 +465,7 @@ class BOLFIModelWrapper():
         self.observations = observations
         self.approximate = approximate
 
-    def construct_BOLFI(self, n_surrogate_samples, batch_size, client):
+    def construct_BOLFI(self, n_surrogate_samples, batch_size, client, sync=True):
         itask = InferenceTask()
         bounds = self.model.get_bounds()
         variables = self.model.get_elfi_variables(itask)
@@ -485,7 +487,7 @@ class BOLFIModelWrapper():
                         store=store,
                         model=gpmodel,
                         acquisition=acquisition,
-                        sync=True,
+                        sync=sync,
                         bounds=bounds,
                         client=client,
                         n_surrogate_samples=n_surrogate_samples)

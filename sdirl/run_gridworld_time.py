@@ -42,7 +42,8 @@ def run(grid_size):
 
     bolfi_params = BolfiParams(
             n_surrogate_samples = 1,
-            batch_size = 1)
+            batch_size = 1,
+            sync = True)
 
     exp = BOLFI_ML_ComparisonExperiment(env,
             seed,

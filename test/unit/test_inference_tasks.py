@@ -43,7 +43,7 @@ class TestBOLFI_Experiment():
         self.cmdargs = list()
         self.model = SimpleGaussianModel(["mean"])
         self.ground_truth = [0]
-        self.bolfi_params = BolfiParams(50, 1)
+        self.bolfi_params = BolfiParams(50, 1, True)
 
     def setup_method(self):
         self.setup_helper()
