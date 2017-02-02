@@ -3,6 +3,7 @@ import numpy as np
 import scipy as sp
 import sys
 import os
+import time
 
 import matplotlib.pyplot as plt
 
@@ -203,17 +204,23 @@ class RLModel(Model):
         assert len(observations) > 0
         ind_log_obs_probs = list()
         policy = self._get_optimal_policy(variables, random_state)
+        logger.info("Evaluating loglikelihood of {} observations".format(len(observations)))
+        start_time1 = time.time()
         for obs_i in observations:
-            logger.info("Evaluating likelihood of {}".format(obs_i))
             if obs_i in self._precomp_obs_logprobs.keys():
+                logger.info("Using precomputed loglikelihood of {}".format(obs_i))
                 logprob = self._precomp_obs_logprobs[obs_i]
                 ind_log_obs_probs.append(logprob)
                 continue
+            logger.info("Evaluating loglikelihood of {}".format(obs_i))
+            start_time2 = time.time()
+            n_paths = 0
             prob_i = 0.0
             paths = self.get_all_paths_for_obs(obs_i)
             for path in paths:
+                n_paths += 1
                 prob_obs = self._prob_obs(obs_i, path)
-                assert prob_obs > 0, "Paths should all have positive probability, but p({})={}"\
+                assert prob_obs > 0, "Paths should all have positive observation probability, but p({})={}"\
                         .format(path, prob_obs)
                 prob_path = self._prob_path(path, policy)
                 if prob_path > 0:
@@ -223,6 +230,13 @@ class RLModel(Model):
             logprob = np.log(prob_i)
             self._precomp_obs_logprobs[obs_i] = logprob
             ind_log_obs_probs.append(logprob)
+            end_time2 = time.time()
+            duration2 = end_time2 - start_time2
+            logger.info("Processed {} paths in {} seconds ({} s/path)"
+                    .format(n_paths, duration2, duration2/n_paths))
+        end_time1 = time.time()
+        duration1 = end_time1 - start_time1
+        logger.info("Logl evaluated in {} seconds".format(duration1))
         return sum(ind_log_obs_probs)
 
     def simulate_observations(self, variables, random_state):
