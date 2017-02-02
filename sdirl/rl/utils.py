@@ -116,30 +116,42 @@ class PathTreeIterator():
 
     def __iter__(self):
         self.indices = [0] * self.maxlen
-        self.end = False
+        self.end = (len(self.paths[self.root]) == 0)
         return self
 
     def __next__(self):
-        if self.end is True:
-            raise StopIteration()
-        path = Path([])
-        node = self.paths[self.root]
-        nvals = list()
-        for i in self.indices:
-            nvals.append(len(node))
-            transition, next_obs = node[i]
-            path.append(transition)
-            assert next_obs in self.paths, "Observation {} not found in tree?".format(next_obs)
-            node = self.paths[next_obs]
-        for i in reversed(range(len(self.indices))):
-            if self.indices[i] < nvals[i]-1:
-                self.indices[i] += 1
-                break
-            else:
-                self.indices[i] = 0
-        if max(self.indices) == 0:
-            self.end = True
-        return path
+        while True:
+            if self.end is True:
+                raise StopIteration()
+            path = None
+            nvals = list()
+            try:
+                path = Path([])
+                node = self.paths[self.root]
+                for i in self.indices:
+                    assert len(node) > 0
+                    nvals.append(len(node))
+                    transition, next_obs = node[i]
+                    if transition is None and next_obs is None:
+                        # dead end
+                        path = None
+                        raise IndexError
+                    path.append(transition)
+                    assert next_obs in self.paths, "Observation {} not found in tree?".format(next_obs)
+                    node = self.paths[next_obs]
+            except IndexError:
+                # dead end
+                pass
+            for i in reversed(range(len(nvals))):
+                if self.indices[i] < nvals[i]-1:
+                    self.indices[i] += 1
+                    break
+                else:
+                    self.indices[i] = 0
+            if max(self.indices) == 0:
+                self.end = True
+            if path is not None:
+                return path
 
 
 def is_integer(i):

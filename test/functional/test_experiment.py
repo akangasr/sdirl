@@ -9,7 +9,7 @@ from sdirl.run_test import run
 @slow
 def test_test_experiment_can_be_run():
     file_dir_path = os.path.dirname(os.path.realpath(__file__))
-    run(file_dir_path)
+    run(file_dir_path, ["filename", 1234])
     experiment_file = os.path.join(file_dir_path, "experiment.json")
     experiment_file_exists = True
     if os.path.isfile(experiment_file):

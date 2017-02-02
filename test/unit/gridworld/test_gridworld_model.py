@@ -124,17 +124,17 @@ class TestGridWorldModel():
             obs = Observation(start_state=init_state, path_len=2)
             paths = model.get_all_paths_for_obs(obs)
             transitions = model.env.get_transitions(init_state)
-            expected_paths = list()
+            all_paths = list()
             for t1 in transitions:
                 next_transitions = model.env.get_transitions(t1.next_state)
                 for t2 in next_transitions:
-                    expected_paths.append(Path([t1, t2]))
+                    all_paths.append(Path([t1, t2]))
             i = 0
             for path in paths:
-                assert path in expected_paths
+                assert path in all_paths
                 assert model._prob_obs(obs, path) > 0.0, (obs, path)
                 i += 1
-            assert i == len(expected_paths)
+            assert i == 4 * 4 * 2  # 4 actions * 4 actions * 2 possible trajectories
 
     @slow  # ~5min
     def test_discrepancy_results_are_sensible(self):
@@ -162,7 +162,7 @@ class TestGridWorldModel():
         assert d22 < d20
         assert d22 < d21
 
-    @slow  # ~30min
+    @slow  # ~10min
     def test_loglikelihood_results_are_sensible(self):
         rs = np.random.RandomState(1)
         obs = list()
@@ -226,7 +226,7 @@ class TestGridWorldModel():
         assert policy(State(3,4), Action.UP) == 1.0
         assert policy(State(4,4), Action.LEFT) == 1.0
 
-    @slow  # ~30min
+    @slow  # ~3h
     def test_loglikelihood_results_are_accurate(self):
         rs = np.random.RandomState(1)
         obs = list()
@@ -234,7 +234,7 @@ class TestGridWorldModel():
         loc = [[-1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0]]
         sel_obs = list()
         for l in loc:
-            model = simple_model(20000, 1000000, prob_rnd_move=0.1, use_test_grid=True)
+            model = simple_model(20000, 2000000, prob_rnd_move=0.1, use_test_grid=True)
             obs.append(model.simulate_observations(l, rs))
             models.append(model)  # use separate models to avoid recomputing the policy
         common_obs = list(set(obs[0]).intersection(set(obs[1])).intersection(set(obs[2])))

@@ -10,6 +10,7 @@ from copy import deepcopy
 import elfi
 from elfi import InferenceTask
 from elfi.bo.gpy_model import GPyModel
+from elfi.bo.acquisition import RbfAtPendingPointsMixin, SecondDerivativeNoiseMixin, LCBAcquisition
 from elfi.methods import BOLFI
 from elfi.posteriors import BolfiPosterior
 
@@ -88,27 +89,36 @@ class BolfiPosteriorUtility():
 class BolfiParams():
     """ Encapsulates BOLFI parameters
     """
-    def __init__(self, n_surrogate_samples=1, batch_size=1, sync=True):
+    def __init__(self,
+            n_surrogate_samples=1,
+            batch_size=1,
+            sync=True,
+            exploration_rate=2.0,
+            opt_iterations=100,
+            rbf_scale=1.0,
+            rbf_amplitude=1.0):
         self.n_surrogate_samples = n_surrogate_samples
         self.batch_size = batch_size
         self.sync = sync
+        self.exploration_rate = exploration_rate
+        self.opt_iterations = opt_iterations
+        self.rbf_scale = rbf_scale
+        self.rbf_amplitude = rbf_amplitude
 
 class BOLFI_Experiment():
     """ Base class for BOLFI experiments
 
     Parameters
     ----------
-    cmdargs : list
-        command line arguments
     model : sdirl.model.Model
     ground_truth : list
         ground truth parameter values
     bolfi_params : BolfiParams
     """
-    def __init__(self, env, cmdargs, model, ground_truth, bolfi_params):
+    def __init__(self, env, model, ground_truth, bolfi_params):
         self.env = env
-        self.cmdargs = cmdargs
-        self.rs, self.client = self.env.setup(self.cmdargs)
+        self.rs = self.env.rs
+        self.client = self.env.client
         self.model = model
         self.ground_truth = ground_truth
         self.bolfi_params = bolfi_params
@@ -130,10 +140,8 @@ class BOLFI_Experiment():
         """ Constructs bolfi inference, returns it and store
         """
         wrapper = BOLFIModelWrapper(deepcopy(model), deepcopy(self.obs), approximate=approximate)
-        bolfi, store = wrapper.construct_BOLFI(n_surrogate_samples=self.bolfi_params.n_surrogate_samples,
-                                               batch_size=self.bolfi_params.batch_size,
-                                               client=self.client,
-                                               sync=self.bolfi_params.sync)
+        bolfi, store = wrapper.construct_BOLFI(bolfi_params=self.bolfi_params,
+                                               client=self.client)
         return bolfi, store
 
     def _calculate_errors(self, posterior):
@@ -183,7 +191,7 @@ class BOLFI_Experiment():
 
     def to_dict(self):
         return {
-            "cmdargs": self.cmdargs,
+            "env": self.env.to_dict(),
             "model_class": self.model.__class__.__name__,
             "model": self.model.to_dict(),
             "ground_truth": self.ground_truth,
@@ -191,18 +199,6 @@ class BOLFI_Experiment():
             "obs": [str(o) for o in self.obs],
             "results": self._serialized_results(),
             }
-
-    @staticmethod
-    def from_dict(data):
-        cmdargs = data["cmdargs"]
-        model = eval(data["model_class"]).from_dict(data["model"])
-        ground_truth = data["ground_truth"]
-        bolfi_params = BolfiParams()
-        bolfi_params.__dict__ = data["bolfi_params"]
-        exp = BOLFI_ML_ComparisonExperiment(cmdargs, model, ground_truth, bolfi_params)
-        exp.obs = data["obs"]  # TODO: proper serialization of results
-        exp._deserialize_results(data["results"])
-        return exp
 
 
 class BOLFI_ML_Experiment(BOLFI_Experiment):
@@ -292,8 +288,8 @@ class BOLFI_ML_SingleExperiment(BOLFI_ML_Experiment):
         True: discrepancy based inference
         False: likelihood based inference
     """
-    def __init__(self, env, cmdargs, model, ground_truth, bolfi_params, approximate):
-        super(BOLFI_ML_Experiment, self).__init__(env, cmdargs, model, ground_truth, bolfi_params)
+    def __init__(self, env, model, ground_truth, bolfi_params, approximate):
+        super(BOLFI_ML_Experiment, self).__init__(env, model, ground_truth, bolfi_params)
         self.approximate = approximate
         logger.info("BOLFI ML EXPERIMENT WITH APPROXIMATE={}".format(self.approximate))
 
@@ -317,8 +313,8 @@ class BOLFI_ML_ComparisonExperiment(BOLFI_ML_Experiment):
         using the exact same set of observations: approximate and exact likelihood maximization
     """
 
-    def __init__(self, env, cmdargs, model, ground_truth, bolfi_params):
-        super(BOLFI_ML_ComparisonExperiment, self).__init__(env, cmdargs, model, ground_truth, bolfi_params)
+    def __init__(self, env, model, ground_truth, bolfi_params):
+        super(BOLFI_ML_ComparisonExperiment, self).__init__(env, model, ground_truth, bolfi_params)
         logger.info("BOLFI ML COMPARISON EXPERIMENT")
 
     def run(self):
@@ -360,16 +356,17 @@ def read_json_file(filename):
 class Environment():
     """ Execution environment setup
     """
-    def __init__(self):
+    def __init__(self, args):
         self.logging_setup()
         self.disable_pybrain_warnings()
+        self.args = args
+        self.rs = self.rng_setup()
+        self.client = self.client_setup()
 
-    def setup(self, args):
-        """ Return random state and dask client
-        """
-        rs = self.rng_setup(args)
-        client = self.client_setup(args)
-        return rs, client
+    def to_dict(self):
+        return {
+                "args": self.args
+                }
 
     def disable_pybrain_warnings(self):
         """ Ignore warnings from output
@@ -400,11 +397,11 @@ class Environment():
         elfi_methods_logger.handlers = [ch]
         logger.handlers = [ch]
 
-    def rng_setup(self, args):
+    def rng_setup(self):
         """ Return a random value source
         """
-        if len(args) > 1:
-            seed = args[1]
+        if len(self.args) > 1:
+            seed = self.args[1]
         else:
             seed = 0
         logger.info("Seed: {}".format(seed))
@@ -412,11 +409,11 @@ class Environment():
         np.random.seed(random.randint(0, 10e7))
         return np.random.RandomState(random.randint(0, 10e7))
 
-    def client_setup(self, args):
+    def client_setup(self):
         """ Set up and return a dask client or None
         """
         client = None
-        if len(args) > 2:
+        if len(self.args) > 2:
             address = "127.0.0.1:{}".format(int(args[2]))
             logger.info("Dask client at " + address)
             client = Client("127.0.0.1:{}".format(int(args[2])))
@@ -425,6 +422,12 @@ class Environment():
             logger.info("Default dask client (client=None)")
         return client
 
+
+class BOLFI_ML_SyncAcquisition(SecondDerivativeNoiseMixin, LCBAcquisition):
+    pass
+
+class BOLFI_ML_AsyncAcquisition(RbfAtPendingPointsMixin, LCBAcquisition):
+    pass
 
 class BOLFIModelWrapper():
     """ Wrapper to allow elfi.BOLFI perform the bayesian optimization for the ML inference
@@ -442,13 +445,26 @@ class BOLFIModelWrapper():
         self.observations = observations
         self.approximate = approximate
 
-    def construct_BOLFI(self, n_surrogate_samples, batch_size, client, sync=True):
+    def construct_BOLFI(self, bolfi_params, client):
         itask = InferenceTask()
         bounds = self.model.get_bounds()
         variables = self.model.get_elfi_variables(itask)
         gpmodel = self.model.get_elfi_gpmodel(self.approximate)
         store = elfi.storage.DictListStore()
-        acquisition = None  # default
+        if bolfi_params.sync is True:
+            acquisition = BOLFI_ML_SyncAcquisition(
+                    exploration_rate=bolfi_params.exploration_rate,
+                    opt_iterations=bolfi_params.opt_iterations,
+                    model=gpmodel,
+                    n_samples=bolfi_params.n_surrogate_samples)
+        else:
+            acquisition = BOLFI_ML_AsyncAcquisition(
+                    exploration_rate=bolfi_params.exploration_rate,
+                    opt_iterations=bolfi_params.opt_iterations,
+                    rbf_scale=bolfi_params.rbf_scale,
+                    rbf_amplitude=bolfi_params.rbf_amplitude,
+                    model=gpmodel,
+                    n_samples=bolfi_params.n_surrogate_samples)
         model = elfi.Simulator('model',
                         elfi.tools.vectorize(self.simulator),
                         *variables,
@@ -460,14 +476,13 @@ class BOLFIModelWrapper():
                         inference_task=itask)
         method = BOLFI(distance_node=disc,
                         parameter_nodes=variables,
-                        batch_size=batch_size,
+                        batch_size=bolfi_params.batch_size,
                         store=store,
                         model=gpmodel,
                         acquisition=acquisition,
-                        sync=sync,
+                        sync=bolfi_params.sync,
                         bounds=bounds,
-                        client=client,
-                        n_surrogate_samples=n_surrogate_samples)
+                        client=client)
         return method, store
 
     def simulator(self, *variables, random_state=None):

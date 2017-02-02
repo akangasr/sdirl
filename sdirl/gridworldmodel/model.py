@@ -131,21 +131,40 @@ class GridWorldModel(RLModel, ELFIModel):
             return 1.0
         return 0.0
 
-    def _fill_path_tree(self, obs):
+    def _fill_path_tree(self, obs, full_path_len):
         """ Recursively fill path tree starting from obs
+
+        Will prune paths that are not feasible:
+         * goes through the goal state and not end state
+         * full path length is less than max, but no way to reach goal state
+           with length that is left in obs
         """
-        if obs not in self._precomp_paths.keys():
+        if obs not in self._paths.keys():
             if obs.path_len > 0:
                 node = list()
                 for transition in self.env.get_transitions(obs.start_state):
                     next_obs = Observation(start_state=transition.next_state,
                                            path_len=obs.path_len-1)
+                    if next_obs.path_len > 0 and next_obs.start_state == self.target_state:
+                        # would go through goal state but path does not end there
+                        continue
+                    if full_path_len < self.path_max_len:
+                        # if path is full length we do not know if we reached goal state at the end
+                        distance = abs(next_obs.start_state.x - self.target_state.x) \
+                                 + abs(next_obs.start_state.y - self.target_state.y)
+                        if next_obs.path_len < distance:
+                            # impossible to reach goal state with path of this length
+                            continue
                     node.append((transition, next_obs))
-                self._precomp_paths[obs] = node
-                for transition, next_obs in node:
-                    self._fill_path_tree(next_obs)
+                if len(node) == 0:
+                    # dead end
+                    self._paths[obs] = ((None, None),)
+                else:
+                    self._paths[obs] = node
+                    for transition, next_obs in node:
+                        self._fill_path_tree(next_obs, full_path_len)
             else:
-                self._precomp_paths[obs] = tuple()
+                self._paths[obs] = tuple()
 
     def calculate_discrepancy(self, observations, sim_observations):
         features = [self._avg_path_len_by_start(i, observations) for i in range(self.initial_state_generator.n_initial_states)]

@@ -12,17 +12,22 @@ import logging
 logger = logging.getLogger(__name__)
 
 if __name__ == "__main__":
+    env = Environment(sys.argv)
+    n_features = 1
 
-    env = Environment()
-    cmdargs = sys.argv
-
-    variable_names = ["feature1_value", "feature2_value", "feature3_value"]
-    #variable_names = ["feature1_value", "feature2_value"]
-    #variable_names = ["feature1_value"]
+    if n_features == 3:
+        variable_names = ["feature1_value", "feature2_value", "feature3_value"]
+        ground_truth = [-0.1, -0.5, -0.9]
+    if n_features == 2:
+        variable_names = ["feature1_value", "feature2_value"]
+        ground_truth = [-0.1, -0.9]
+    if n_features == 1:
+        variable_names = ["feature1_value"]
+        ground_truth = [-0.5]
     grid_size = 3
     step_penalty = 0.1
     prob_rnd_move = 0.05
-    world_seed = 1234  # TODO: randomize
+    world_seed = env.rs.randint(1e7)
     n_training_episodes = 1000000
     n_episodes_per_epoch = 10
     n_simulation_episodes = 1000
@@ -40,17 +45,17 @@ if __name__ == "__main__":
         initial_state=initial_state,
         grid_type=grid_type,
         verbose=verbose)
-    ground_truth = [-0.1, -0.5, -0.9]
-    #ground_truth = [-0.1, -0.9]
-    #ground_truth = [-0.5]
 
     bolfi_params = BolfiParams(
-            n_surrogate_samples = 300,
+            n_surrogate_samples = 200,
             batch_size = 10,
-            sync = False)
+            sync = False,
+            exploration_rate = 2.0,
+            opt_iterations = 1000,
+            rbf_scale = 0.1,
+            rbf_amplitude = 0.5)
 
     exp = BOLFI_ML_SingleExperiment(env,
-            cmdargs,
             model,
             ground_truth,
             bolfi_params,

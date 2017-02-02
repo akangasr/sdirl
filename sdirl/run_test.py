@@ -8,9 +8,8 @@ from sdirl.inference_tasks import *
 import logging
 logger = logging.getLogger(__name__)
 
-def run(location):
-    env = Environment()
-    cmdargs = sys.argv
+def run(location, cmdargs):
+    env = Environment(cmdargs)
 
     model = SimpleGaussianModel(["mean"])
     ground_truth = [0.0]
@@ -21,7 +20,6 @@ def run(location):
             sync = True)
 
     exp = BOLFI_ML_SingleExperiment(env,
-            cmdargs,
             model,
             ground_truth,
             bolfi_params,
@@ -35,4 +33,5 @@ def run(location):
 
 if __name__ == "__main__":
     file_dir_path = os.path.dirname(os.path.realpath(__file__))
-    run(file_dir_path)
+    cmdargs = sys.argv
+    run(file_dir_path, cmdargs)

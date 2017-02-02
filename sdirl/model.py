@@ -186,7 +186,7 @@ class RLModel(Model):
         self.rl = None  # RLModel
         self.goal_state = None
         self.path_max_len = None
-        self._precomp_paths = dict()
+        self._paths = None
         self.prev_variables = []
         self._precomp_obs_logprobs = dict()
 
@@ -282,7 +282,7 @@ class RLModel(Model):
             if self.verbose is True:
                 self.print_model()
 
-    def _fill_path_tree(self, obs):
+    def _fill_path_tree(self, obs, full_path_len, prune=True):
         """ Recursively fill path tree starting from obs
         """
         raise NotImplementedError("Subclass implements")
@@ -291,8 +291,15 @@ class RLModel(Model):
         """ Returns a tree containing all possible paths that could have generated
             observation 'obs'.
         """
-        self._fill_path_tree(obs)
-        return PathTreeIterator(obs, self._precomp_paths, obs.path_len)
+        self._paths = dict()
+        start_time = time.time()
+        self._fill_path_tree(obs, obs.path_len)
+        end_time = time.time()
+        logger.info("Constructing path tree of depth {} took {} seconds"
+                .format(obs.path_len, end_time-start_time))
+        paths = self._paths
+        self._paths = None
+        return PathTreeIterator(obs, paths, obs.path_len)
 
     def _prob_obs(self, observation, path):
         """ Returns the probability that 'path' would generate 'observation'.
@@ -308,16 +315,14 @@ class RLModel(Model):
         policy : callable(state, action) -> p(action | state)
         """
         logp = 0
-        if len(path) < self.path_max_len and path.transitions[-1].next_state != self.target_state:
-            return 0.0
+        if len(path) < self.path_max_len:
+            assert path.transitions[-1].next_state == self.target_state  # should have been be pruned
         # assume all start states equally probable
         for transition in path.transitions:
             state = transition.prev_state
             action = transition.action
             next_state = transition.next_state
-            if state == self.target_state:
-                # goal state can only be a 'next state' as it is absorbing
-                return 0.0
+            assert state != self.target_state  # should have been pruned
             act_i_prob = policy(state, action)
             if act_i_prob == 0:
                 return 0.0

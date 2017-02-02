@@ -12,9 +12,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 if __name__ == "__main__":
-
-    env = Environment()
-    cmdargs = sys.argv
+    env = Environment(sys.argv)
 
     variable_names = ["focus_duration_100ms"]
     n_training_episodes = 20000000
@@ -31,10 +29,13 @@ if __name__ == "__main__":
     bolfi_params = BolfiParams(
             n_surrogate_samples = 100,
             batch_size = 10,
-            sync = False)
+            sync = False,
+            exploration_rate = 2.0,
+            opt_iterations = 1000,
+            rbf_scale = 0.5,
+            rbf_amplitude = 0.5)
 
     exp = BOLFI_ML_SingleExperiment(env,
-            cmdargs,
             model,
             ground_truth,
             bolfi_params,

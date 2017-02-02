@@ -13,8 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 def run(grid_size):
-    env = Environment()
-    cmdargs = sys.argv
+    env = Environment(sys.argv)
 
     variable_names = ["feature1_value"]
     step_penalty = 0.1
@@ -45,7 +44,6 @@ def run(grid_size):
             sync = True)
 
     exp = BOLFI_ML_ComparisonExperiment(env,
-            cmdargs,
             model,
             ground_truth,
             bolfi_params)

@@ -29,7 +29,13 @@ def create_simple_model_and_bolfi_inference(approximate):
     obs = model.simulate_observations(loc, rs)
     wrapper = BOLFIModelWrapper(model, obs, approximate=approximate)
     client = elfi.env.client(1,1)
-    bolfi, store = wrapper.construct_BOLFI(n_surrogate_samples=20, batch_size=1, client=client)
+    bolfi_params = BolfiParams(
+            n_surrogate_samples=20,
+            batch_size=1,
+            sync=True,
+            exploration_rate=2.0,
+            opt_iterations=100)
+    bolfi, store = wrapper.construct_BOLFI(bolfi_params=bolfi_params, client=client)
     return bolfi, loc
 
 
@@ -37,8 +43,8 @@ class TestBOLFI_Experiment():
 
     def setup_helper(self):
         self.env = Mock(Environment)
-        rs = np.random.RandomState(0)
-        self.env.setup = Mock(return_value=(rs, None))
+        self.env.rs = np.random.RandomState(0)
+        self.env.client = None
         self.cmdargs = list()
         self.model = SimpleGaussianModel(["mean"])
         self.ground_truth = [0]
@@ -52,22 +58,17 @@ class TestBOLFI_Experiment():
                 self.ground_truth,
                 self.bolfi_params)
 
-    def test_initialization_calls_environment_setup(self):
-        assert self.env.setup.called
-
 
 class TestBOLFI_ML_SingleExperiment(TestBOLFI_Experiment):
 
     def setup_method(self):
         self.setup_helper()
         self.exp1 = BOLFI_ML_SingleExperiment(self.env,
-                self.cmdargs,
                 self.model,
                 self.ground_truth,
                 self.bolfi_params,
                 approximate=True)
         self.exp2 = BOLFI_ML_SingleExperiment(self.env,
-                self.cmdargs,
                 self.model,
                 self.ground_truth,
                 self.bolfi_params,
@@ -90,7 +91,6 @@ class TestBOLFI_ML_ComparisonExperiment(TestBOLFI_Experiment):
     def setup_method(self):
         self.setup_helper()
         self.exp = BOLFI_ML_ComparisonExperiment(self.env,
-                self.cmdargs,
                 self.model,
                 self.ground_truth,
                 self.bolfi_params)
