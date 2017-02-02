@@ -13,8 +13,7 @@ logger = logging.getLogger(__name__)
 
 if __name__ == "__main__":
 
-    env = Environment(variant="local")
-    seed = 1321412531
+    env = Environment()
     cmdargs = sys.argv
 
     variable_names = ["focus_duration_100ms"]
@@ -35,7 +34,6 @@ if __name__ == "__main__":
             sync = False)
 
     exp = BOLFI_ML_SingleExperiment(env,
-            seed,
             cmdargs,
             model,
             ground_truth,

@@ -98,8 +98,6 @@ class BOLFI_Experiment():
 
     Parameters
     ----------
-    seed : int
-        given this, the experiment sould be deterministic
     cmdargs : list
         command line arguments
     model : sdirl.model.Model
@@ -107,11 +105,10 @@ class BOLFI_Experiment():
         ground truth parameter values
     bolfi_params : BolfiParams
     """
-    def __init__(self, env, seed, cmdargs, model, ground_truth, bolfi_params):
+    def __init__(self, env, cmdargs, model, ground_truth, bolfi_params):
         self.env = env
-        self.seed = seed
         self.cmdargs = cmdargs
-        self.rs, self.client = self.env.setup(self.seed, self.cmdargs)
+        self.rs, self.client = self.env.setup(self.cmdargs)
         self.model = model
         self.ground_truth = ground_truth
         self.bolfi_params = bolfi_params
@@ -186,7 +183,6 @@ class BOLFI_Experiment():
 
     def to_dict(self):
         return {
-            "seed": self.seed,
             "cmdargs": self.cmdargs,
             "model_class": self.model.__class__.__name__,
             "model": self.model.to_dict(),
@@ -198,13 +194,12 @@ class BOLFI_Experiment():
 
     @staticmethod
     def from_dict(data):
-        seed = data["seed"]
         cmdargs = data["cmdargs"]
         model = eval(data["model_class"]).from_dict(data["model"])
         ground_truth = data["ground_truth"]
         bolfi_params = BolfiParams()
         bolfi_params.__dict__ = data["bolfi_params"]
-        exp = BOLFI_ML_ComparisonExperiment(seed, cmdargs, model, ground_truth, bolfi_params)
+        exp = BOLFI_ML_ComparisonExperiment(cmdargs, model, ground_truth, bolfi_params)
         exp.obs = data["obs"]  # TODO: proper serialization of results
         exp._deserialize_results(data["results"])
         return exp
@@ -297,8 +292,8 @@ class BOLFI_ML_SingleExperiment(BOLFI_ML_Experiment):
         True: discrepancy based inference
         False: likelihood based inference
     """
-    def __init__(self, env, seed, cmdargs, model, ground_truth, bolfi_params, approximate):
-        super(BOLFI_ML_Experiment, self).__init__(env, seed, cmdargs, model, ground_truth, bolfi_params)
+    def __init__(self, env, cmdargs, model, ground_truth, bolfi_params, approximate):
+        super(BOLFI_ML_Experiment, self).__init__(env, cmdargs, model, ground_truth, bolfi_params)
         self.approximate = approximate
         logger.info("BOLFI ML EXPERIMENT WITH APPROXIMATE={}".format(self.approximate))
 
@@ -322,8 +317,8 @@ class BOLFI_ML_ComparisonExperiment(BOLFI_ML_Experiment):
         using the exact same set of observations: approximate and exact likelihood maximization
     """
 
-    def __init__(self, env, seed, cmdargs, model, ground_truth, bolfi_params):
-        super(BOLFI_ML_ComparisonExperiment, self).__init__(env, seed, cmdargs, model, ground_truth, bolfi_params)
+    def __init__(self, env, cmdargs, model, ground_truth, bolfi_params):
+        super(BOLFI_ML_ComparisonExperiment, self).__init__(env, cmdargs, model, ground_truth, bolfi_params)
         logger.info("BOLFI ML COMPARISON EXPERIMENT")
 
     def run(self):
@@ -364,49 +359,24 @@ def read_json_file(filename):
 
 class Environment():
     """ Execution environment setup
-
-    Parameters
-    ----------
-    variant : string
-        "distributed" : separate dask.distributed scheduler
-        "local" : default scheduler
     """
-    def __init__(self, variant):
-        self.variant = variant
-        Environment.logging_setup()
-        Environment.disable_pybrain_warnings()
-        if self.variant == "distributed":
-            logger.info("DISTRIBUTED environment setup")
-            self.setup = Environment.setup_distributed
-        if self.variant == "local":
-            logger.info("LOCAL environment setup")
-            self.setup = Environment.setup_local
+    def __init__(self):
+        self.logging_setup()
+        self.disable_pybrain_warnings()
 
-    def setup(self, seed, args):
-        pass
-
-    @staticmethod
-    def setup_local(seed, args):
-        """ Default experiment setup for local
+    def setup(self, args):
+        """ Return random state and dask client
         """
-        rs = Environment.random_seed_setup(seed)
-        client = None
+        rs = self.rng_setup(args)
+        client = self.client_setup(args)
         return rs, client
 
-    @staticmethod
-    def setup_distributed(seed, args):
-        """ Default experiment setup for distributed
-        """
-        rs = Environment.random_seed_setup(seed)
-        client = Environment.dask_client_setup(args)
-        return rs, client
-
-    def disable_pybrain_warnings():
+    def disable_pybrain_warnings(self):
         """ Ignore warnings from output
         """
         warnings.simplefilter("ignore")
 
-    def logging_setup():
+    def logging_setup(self):
         """ Set logging
         """
         logger.setLevel(logging.INFO)
@@ -430,22 +400,29 @@ class Environment():
         elfi_methods_logger.handlers = [ch]
         logger.handlers = [ch]
 
-    def random_seed_setup(seed):
-        """ Fix random seeds, return a random value source
+    def rng_setup(self, args):
+        """ Return a random value source
         """
+        if len(args) > 1:
+            seed = args[1]
+        else:
+            seed = 0
+        logger.info("Seed: {}".format(seed))
         random.seed(seed)
         np.random.seed(random.randint(0, 10e7))
         return np.random.RandomState(random.randint(0, 10e7))
 
-    def dask_client_setup(args):
+    def client_setup(self, args):
         """ Set up and return a dask client or None
         """
         client = None
-        if len(args) > 1:
-            address = "127.0.0.1:{}".format(int(args[1]))
+        if len(args) > 2:
+            address = "127.0.0.1:{}".format(int(args[2]))
             logger.info("Dask client at " + address)
-            client = Client("127.0.0.1:{}".format(int(args[1])))
+            client = Client("127.0.0.1:{}".format(int(args[2])))
             dask.set_options(get=client.get)
+        else:
+            logger.info("Default dask client (client=None)")
         return client
 
 

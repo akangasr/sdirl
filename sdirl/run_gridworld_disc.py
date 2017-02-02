@@ -13,15 +13,16 @@ logger = logging.getLogger(__name__)
 
 if __name__ == "__main__":
 
-    env = Environment(variant="local")
-    seed = 123987123
+    env = Environment()
     cmdargs = sys.argv
 
     variable_names = ["feature1_value", "feature2_value", "feature3_value"]
-    grid_size = 13
+    #variable_names = ["feature1_value", "feature2_value"]
+    #variable_names = ["feature1_value"]
+    grid_size = 3
     step_penalty = 0.1
     prob_rnd_move = 0.05
-    world_seed = 1234
+    world_seed = 1234  # TODO: randomize
     n_training_episodes = 1000000
     n_episodes_per_epoch = 10
     n_simulation_episodes = 1000
@@ -40,6 +41,8 @@ if __name__ == "__main__":
         grid_type=grid_type,
         verbose=verbose)
     ground_truth = [-0.1, -0.5, -0.9]
+    #ground_truth = [-0.1, -0.9]
+    #ground_truth = [-0.5]
 
     bolfi_params = BolfiParams(
             n_surrogate_samples = 300,
@@ -47,7 +50,6 @@ if __name__ == "__main__":
             sync = False)
 
     exp = BOLFI_ML_SingleExperiment(env,
-            seed,
             cmdargs,
             model,
             ground_truth,

@@ -9,8 +9,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 def run(location):
-    env = Environment(variant="local")
-    seed = 0
+    env = Environment()
     cmdargs = sys.argv
 
     model = SimpleGaussianModel(["mean"])
@@ -22,7 +21,6 @@ def run(location):
             sync = True)
 
     exp = BOLFI_ML_SingleExperiment(env,
-            seed,
             cmdargs,
             model,
             ground_truth,

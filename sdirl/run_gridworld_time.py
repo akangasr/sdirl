@@ -13,8 +13,7 @@ logger = logging.getLogger(__name__)
 
 
 def run(grid_size):
-    env = Environment(variant="local")
-    seed = 12353
+    env = Environment()
     cmdargs = sys.argv
 
     variable_names = ["feature1_value"]
@@ -46,7 +45,6 @@ def run(grid_size):
             sync = True)
 
     exp = BOLFI_ML_ComparisonExperiment(env,
-            seed,
             cmdargs,
             model,
             ground_truth,

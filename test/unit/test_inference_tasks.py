@@ -39,7 +39,6 @@ class TestBOLFI_Experiment():
         self.env = Mock(Environment)
         rs = np.random.RandomState(0)
         self.env.setup = Mock(return_value=(rs, None))
-        self.seed = 0
         self.cmdargs = list()
         self.model = SimpleGaussianModel(["mean"])
         self.ground_truth = [0]
@@ -48,7 +47,6 @@ class TestBOLFI_Experiment():
     def setup_method(self):
         self.setup_helper()
         self.exp = BOLFI_ML_Experiment(self.env,
-                self.seed,
                 self.cmdargs,
                 self.model,
                 self.ground_truth,
@@ -63,14 +61,12 @@ class TestBOLFI_ML_SingleExperiment(TestBOLFI_Experiment):
     def setup_method(self):
         self.setup_helper()
         self.exp1 = BOLFI_ML_SingleExperiment(self.env,
-                self.seed,
                 self.cmdargs,
                 self.model,
                 self.ground_truth,
                 self.bolfi_params,
                 approximate=True)
         self.exp2 = BOLFI_ML_SingleExperiment(self.env,
-                self.seed,
                 self.cmdargs,
                 self.model,
                 self.ground_truth,
@@ -94,7 +90,6 @@ class TestBOLFI_ML_ComparisonExperiment(TestBOLFI_Experiment):
     def setup_method(self):
         self.setup_helper()
         self.exp = BOLFI_ML_ComparisonExperiment(self.env,
-                self.seed,
                 self.cmdargs,
                 self.model,
                 self.ground_truth,
