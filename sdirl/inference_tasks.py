@@ -414,9 +414,9 @@ class Environment():
         """
         client = None
         if len(self.args) > 2:
-            address = "127.0.0.1:{}".format(int(args[2]))
+            address = "127.0.0.1:{}".format(int(self.args[2]))
             logger.info("Dask client at " + address)
-            client = Client("127.0.0.1:{}".format(int(args[2])))
+            client = Client(address)
             dask.set_options(get=client.get)
         else:
             logger.info("Default dask client (client=None)")
