@@ -15,11 +15,13 @@ if __name__ == "__main__":
     env = Environment(sys.argv)
 
     variable_names = ["focus_duration_100ms"]
-    n_training_episodes = 20000000
+    n_training_menus = 50000
+    n_training_episodes = 10000000
     n_episodes_per_epoch = 10
     n_simulation_episodes = 10000
     verbose = True
     model = MenuSearchModel(variable_names,
+        n_training_menus=n_training_menus,
         n_training_episodes=n_training_episodes,
         n_episodes_per_epoch=n_episodes_per_epoch,
         n_simulation_episodes=n_simulation_episodes,
@@ -28,14 +30,14 @@ if __name__ == "__main__":
 
     bolfi_params = BolfiParams(
             n_surrogate_samples = 100,
-            batch_size = 10,
+            batch_size = 20,
             sync = False,
             exploration_rate = 2.0,
             opt_iterations = 1000,
             rbf_scale = 0.5,
             rbf_amplitude = 0.5)
 
-    exp = BOLFI_ML_SingleExperiment(env,
+    exp = BOLFI_MAP_SingleExperiment(env,
             model,
             ground_truth,
             bolfi_params,

@@ -58,6 +58,7 @@ class GridWorldModel(RLModel, ELFIModel):
             n_training_episodes=1000,
             n_episodes_per_epoch=10,
             n_simulation_episodes=100,
+            max_sim_episode_len=10000,
             initial_state="edge",
             grid_type="walls",
             verbose=False):
@@ -79,6 +80,7 @@ class GridWorldModel(RLModel, ELFIModel):
         else:
             raise ValueError("Unknown grid type: {}".format(self.grid_type))
 
+        self.max_sim_episode_len = max_sim_episode_len
         self.target_state = State(int(grid_size/2), int(grid_size/2))
         self.path_max_len = grid_size*2
         self.env = GridWorldEnvironment(
@@ -103,11 +105,32 @@ class GridWorldModel(RLModel, ELFIModel):
         if self.verbose is True:
             self.env.print_grid()
 
+        self.kernel_var = 1.0
+        self.kernel_scale = 0.5
+        self.noise_var = 1.0
+        self.optimizer = "scg"
+        self.max_opt_iters = 10
+
+
     def to_dict(self):
         ret = super(GridWorldModel, self).to_dict()
         ret["initial_state"] = self.initial_state
         ret["grid_type"] = self.grid_type
+        ret["max_sim_episode_len"] = self.max_sim_episode_len
         return ret
+
+    def _filt_obs(self, observations):
+        filt_obs = [obs for obs in observations if obs.path_len <= self.max_sim_episode_len]
+        if len(filt_obs) < len(observations):
+            logger.info("Filtered observations to be at most length {}, left {} out of {}"\
+                    .format(self.max_sim_episode_len, len(filt_obs), len(observations)))
+        return filt_obs
+
+    def evaluate_loglikelihood(self, variables, observations, random_state):
+        return super(GridWorldModel, self).evaluate_loglikelihood(variables, self._filt_obs(observations), random_state)
+
+    def evaluate_discrepancy(self, variables, observations, random_state):
+        return super(GridWorldModel, self).evaluate_discrepancy(variables, self._filt_obs(observations), random_state)
 
     def summarize(self, raw_observations):
         return [self.summary(ses["path"]) for ses in raw_observations["sessions"]]
@@ -190,4 +213,5 @@ class GridWorldModel(RLModel, ELFIModel):
         for v in self.variable_names:
             ret.append((-1, 0))
         return tuple(ret)
+
 

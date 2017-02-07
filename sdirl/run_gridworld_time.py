@@ -16,10 +16,10 @@ def run(grid_size):
     env = Environment(sys.argv)
 
     variable_names = ["feature1_value"]
-    step_penalty = 0.1
+    step_penalty = 0.05
     prob_rnd_move = 0.05
     world_seed = 1234
-    n_training_episodes = 100000
+    n_training_episodes = 1000000
     n_episodes_per_epoch = 10
     n_simulation_episodes = 100
     initial_state = "edge"

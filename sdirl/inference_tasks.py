@@ -144,11 +144,8 @@ class BOLFI_Experiment():
                                                client=self.client)
         return bolfi, store
 
-    def _calculate_errors(self, posterior):
-        """ Calculates error in results
-        """
+    def _calculate_errors(self, posteriors, duration):
         raise NotImplementedError
-        return np.linalg.norm(np.array(self.ground_truth) - posterior.ML, ord=2)
 
     def _run_inference(self, approximate):
         logger.info("Inferring ML (approximate={})..".format(approximate))
@@ -158,10 +155,7 @@ class BOLFI_Experiment():
         end_time = time.time()
         posteriors = [BolfiPosteriorUtility.from_model(store.get("BOLFI-model", i)[0])
                 for i in range(self.bolfi_params.n_surrogate_samples)]
-        errors = [self._calculate_errors(p) for p in posteriors]
-        logger.info("Ground truth: {}, ML estimate: {}".format(self.ground_truth, posteriors[-1].ML))
-        results = BOLFIExperimentResults(posteriors, errors, end_time - start_time)
-        results.print_errors()
+        results = self._calculate_errors(posteriors, end_time-start_time)
         return results
 
     def _serialized_results(self):
@@ -201,27 +195,79 @@ class BOLFI_Experiment():
             }
 
 
+class BOLFI_MAP_Experiment(BOLFI_Experiment):
+
+    def _calculate_errors(self, posteriors, duration):
+        errors_L2 = [calculate_errors_L2(self.ground_truth, p.MAP) for p in posteriors]
+        errors_ord = [calculate_errors_ord(self.ground_truth, p.MAP) for p in posteriors]
+        errors_prop = [calculate_errors_prop(self.ground_truth, p.MAP) for p in posteriors]
+        logger.info("Ground truth: {}, MAP estimate: {}".format(self.ground_truth, posteriors[-1].MAP))
+        results = BOLFIExperimentResults(posteriors, errors_L2, errors_ord, errors_prop, duration)
+        logger.info("L2:")
+        results.print_errors(errors_L2)
+        logger.info("Ordering:")
+        results.print_errors(errors_ord)
+        logger.info("Proportions:")
+        results.print_errors(errors_prop)
+        return results
+
+
 class BOLFI_ML_Experiment(BOLFI_Experiment):
 
-    def _calculate_errors(self, posterior):
-        """ Calculates L2 ML error
-        """
-        return np.linalg.norm(np.array(self.ground_truth) - posterior.ML, ord=2)
+    def _calculate_errors(self, posteriors, duration):
+        errors_L2 = [calculate_errors_L2(self.ground_truth, p.ML) for p in posteriors]
+        errors_ord = [calculate_errors_ord(self.ground_truth, p.ML) for p in posteriors]
+        errors_prop = [calculate_errors_prop(self.ground_truth, p.ML) for p in posteriors]
+        logger.info("Ground truth: {}, ML estimate: {}".format(self.ground_truth, posteriors[-1].ML))
+        results = BOLFIExperimentResults(posteriors, errors_L2, errors_ord, errors_prop, duration)
+        logger.info("L2:")
+        results.print_errors(errors_L2)
+        logger.info("Ordering:")
+        results.print_errors(errors_ord)
+        logger.info("Proportions:")
+        results.print_errors(errors_prop)
+        return results
+
+
+def calculate_errors_L2(ground_truth, estimates):
+    """ Calculates ML error using L2 distance
+    """
+    return np.linalg.norm(np.array(ground_truth) - estimates, ord=2)
+
+def calculate_errors_ord(ground_truth, estimates):
+    """ Calculates ordering-based ML error (hamming distance of ranks)
+    """
+    order_gt = np.argsort(ground_truth)
+    order = np.argsort(estimates)
+    return sum([o1 == o2 for o1, o2 in zip(order_gt, order)])
+
+def calculate_errors_prop(ground_truth, estimates):
+    """ Calculates proportion-based ML error (L2 distance between vectors of parameter proportions)
+    """
+    prop_gt = list()
+    prop = list()
+    for i in range(len(ground_truth)):
+        for j in range(i+1, len(ground_truth)):
+            prop_gt.append(float(ground_truth[i])/float(ground_truth[j]))
+            prop.append(float(estimates[i])/float(estimates[j]))
+    return np.linalg.norm(np.array(prop_gt) - np.array(prop), ord=2)
 
 
 class BOLFIExperimentResults():
 
-    def __init__(self, posteriors, errors, duration):
+    def __init__(self, posteriors, errors_L2, errors_ord, errors_prop, duration):
         self.posteriors = posteriors
-        self.errors = errors
+        self.errors_L2 = errors_L2
+        self.errors_ord = errors_ord
+        self.errors_prop = errors_prop
         self.duration = duration
 
-    def print_errors(self, grid=30):
+    def print_errors(self, errors, grid=30):
         logger.info("Errors:")
-        lim = max(self.errors) / float(grid)
+        lim = max(errors) / float(grid)
         for n in reversed(range(grid)):
             st = ["{: >+5.3f}".format(n*lim)]
-            for e in self.errors:
+            for e in errors:
                 if e >= n*lim:
                     st.append("*")
                 else:
@@ -234,12 +280,12 @@ class BOLFIExperimentResults():
         pdf.savefig()
         pl.close()
 
-    def plot_errors(self, pdf, figsize):
+    def plot_errors(self, pdf, errors, name, figsize):
         fig = pl.figure(figsize=figsize)
-        t = range(len(self.errors))
-        pl.plot(t, self.errors)
+        t = range(len(errors))
+        pl.plot(t, errors)
         pl.xlabel("BO samples")
-        pl.ylabel("L2 error in ML estimate")
+        pl.ylabel("{} error in estimate".format(name))
         pl.title("Reduction in error over time")
         pdf.savefig()
         pl.close()
@@ -251,31 +297,38 @@ class BOLFIExperimentResults():
     def plot_posterior(self, pdf, figsize, posterior):
         if posterior.model.gp is None:
             return
-        if posterior.model.input_dim not in [1, 2]:
-            return
         fig = pl.figure(figsize=figsize)
-        posterior.model.gp.plot()
+        try:
+            posterior.model.gp.plot()
+        except:
+            fig.text(0.02, 0.01, "Could not plot model")
         pdf.savefig()
         pl.close()
 
     def plot_pdf(self, pdf, figsize):
         self.plot_info(pdf, figsize)
-        self.plot_errors(pdf, figsize)
+        self.plot_errors(pdf, self.errors_L2, "L2", figsize)
+        self.plot_errors(pdf, self.errors_ord, "Order", figsize)
+        self.plot_errors(pdf, self.errors_prop, "Proportions", figsize)
         self.plot_posteriors(pdf, figsize)
 
     def to_dict(self):
         return {
                 "posteriors": [BolfiPosteriorUtility.to_dict(p) for p in self.posteriors],
-                "errors": self.errors,
+                "errors_L2": self.errors_L2,
+                "errors_ord": self.errors_ord,
+                "errors_prop": self.errors_prop,
                 "duration": self.duration,
                 }
 
     @staticmethod
     def from_dict(d):
         posteriors = [BolfiPosteriorUtility.from_dict(p) for p in d["posteriors"]]
-        errors = d["errors"]
+        errors_L2 = d["errors_L2"]
+        errors_ord = d["errors_ord"]
+        errors_prop = d["errors_prop"]
         duration = d["duration"]
-        return BOLFIExperimentResults(posteriors, errors, duration)
+        return BOLFIExperimentResults(posteriors, errors_L2, errors_ord, errors_prop, duration)
 
 
 class BOLFI_ML_SingleExperiment(BOLFI_ML_Experiment):
@@ -292,6 +345,36 @@ class BOLFI_ML_SingleExperiment(BOLFI_ML_Experiment):
         super(BOLFI_ML_Experiment, self).__init__(env, model, ground_truth, bolfi_params)
         self.approximate = approximate
         logger.info("BOLFI ML EXPERIMENT WITH APPROXIMATE={}".format(self.approximate))
+
+    def run(self):
+        self._generate_observations()
+        results = self._run_inference(approximate=self.approximate)
+        self.results = {
+                "results": results,
+                }
+
+    def print_results(self, pdf, figsize):
+        if self.approximate is True:
+            self._print_text_page(pdf, figsize, "Approximate inference")
+        else:
+            self._print_text_page(pdf, figsize, "Exact inference")
+        self.results["results"].plot_pdf(pdf, figsize)
+
+
+class BOLFI_MAP_SingleExperiment(BOLFI_MAP_Experiment):
+    """ Experiment where we have one method for inferring the MAP estimate of a model:
+        approximate or exact likelihood maximization
+
+    Parameters
+    ----------
+    approximate : bool
+        True: discrepancy based inference
+        False: likelihood based inference
+    """
+    def __init__(self, env, model, ground_truth, bolfi_params, approximate):
+        super(BOLFI_MAP_Experiment, self).__init__(env, model, ground_truth, bolfi_params)
+        self.approximate = approximate
+        logger.info("BOLFI MAP EXPERIMENT WITH APPROXIMATE={}".format(self.approximate))
 
     def run(self):
         self._generate_observations()

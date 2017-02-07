@@ -3,6 +3,7 @@ import numpy as np
 from sdirl.menumodel.mdp import SearchEnvironment, SearchTask
 from sdirl.rl.simulator import RLSimulator
 from sdirl.model import RLModel, ELFIModel
+import elfi
 
 import logging
 logger = logging.getLogger(__name__)
@@ -76,6 +77,13 @@ class MenuSearchModel(RLModel, ELFIModel):
                     env=self.env,
                     task=self.task)
 
+        self.noise_var = 0.05
+        self.kernel_var = 1.0
+        self.kernel_scale = 1.0
+        self.optimizer = "scg"
+        self.max_opt_iters = 50
+
+
     def evaluate_likelihood(variables, observations, random_state=None):
         raise NotImplementedError("Very difficult to evaluate.")
 
@@ -129,4 +137,21 @@ class MenuSearchModel(RLModel, ELFIModel):
             else:
                 raise ValueError
         return tuple(ret)
+
+    def get_elfi_variables(self, inference_task):
+        """ Returns a list of elfi.Prior objects for use in ELFI.
+
+        As we do posterior inference return truncated normal distribution as prior
+        """
+        elfi_variables = list()
+        bounds = self.get_bounds()
+        for v, b in zip(self.variable_names, bounds):
+            if v == "focus_duration_100ms":
+                mean = 4.0
+                std = 1.0
+            a, b = (b[0] - mean) / std, (b[1] - mean) / std
+            v = elfi.Prior(v, "truncnorm", a, b, mean, std, inference_task=inference_task)
+            elfi_variables.append(v)
+        return elfi_variables
+
 

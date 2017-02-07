@@ -220,6 +220,18 @@ class SearchEnvironment(ParametricLoggingEnvironment):
         self.discreteActions = True
         self.numActions = self.n_items + 2 # look + click + quit
 
+    def to_dict(self):
+        return {
+                "menu_type": self.menu_type,
+                "menu_groups": self.menu_groups,
+                "menu_items_per_group": self.menu_items_per_group,
+                "semantic_levels": self.semantic_levels,
+                "gap_between_items": self.gap_between_items,
+                "prop_target_absent": self.prop_target_absent,
+                "length_observations": self.length_observations,
+                "n_training_menus": self.n_training_menus,
+                }
+
     def _get_menu(self):
         if self.training is True and len(self.training_menus) >= self.n_training_menus:
             idx = self.random_state.randint(self.n_training_menus)
