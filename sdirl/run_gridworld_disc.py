@@ -13,12 +13,12 @@ logger = logging.getLogger(__name__)
 
 if __name__ == "__main__":
     env = Environment(sys.argv)
-    #n_features = 2
+    n_features = 2
     #n_features = 3
-    n_features = 4
-    #grid_size = 9
+    #n_features = 4
+    grid_size = 9
     #grid_size = 13
-    grid_size = 19
+    #grid_size = 19
     #grid_size = 23
     #grid_size = 29
 

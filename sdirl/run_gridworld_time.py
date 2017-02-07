@@ -22,6 +22,7 @@ def run(grid_size):
     n_training_episodes = 1000000
     n_episodes_per_epoch = 10
     n_simulation_episodes = 100
+    max_sim_episode_len = 8
     initial_state = "edge"
     grid_type = "walls"
     verbose = True
@@ -33,6 +34,7 @@ def run(grid_size):
         n_training_episodes=n_training_episodes,
         n_episodes_per_epoch=n_episodes_per_epoch,
         n_simulation_episodes=n_simulation_episodes,
+        max_sim_episode_len=max_sim_episode_len,
         initial_state=initial_state,
         grid_type=grid_type,
         verbose=verbose)

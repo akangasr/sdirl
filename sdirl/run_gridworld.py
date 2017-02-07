@@ -13,9 +13,9 @@ logger = logging.getLogger(__name__)
 
 if __name__ == "__main__":
     env = Environment(sys.argv)
-    #n_features = 2
+    n_features = 2
     #n_features = 3
-    n_features = 4
+    #n_features = 4
 
     if n_features == 4:
         variable_names = ["feature1_value", "feature2_value", "feature3_value", "feature4_value"]

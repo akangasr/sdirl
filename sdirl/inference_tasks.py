@@ -10,7 +10,7 @@ from copy import deepcopy
 import elfi
 from elfi import InferenceTask
 from elfi.bo.gpy_model import GPyModel
-from elfi.bo.acquisition import RbfAtPendingPointsMixin, SecondDerivativeNoiseMixin, LCBAcquisition
+from elfi.bo.acquisition import *
 from elfi.methods import BOLFI
 from elfi.posteriors import BolfiPosterior
 
@@ -534,12 +534,17 @@ class BOLFIModelWrapper():
         variables = self.model.get_elfi_variables(itask)
         gpmodel = self.model.get_elfi_gpmodel(self.approximate)
         store = elfi.storage.DictListStore()
+        batches_of_init_samples = 1
+        n_init_samples =  bolfi_params.batch_size * batches_of_init_samples
+        n_acq_samples = bolfi_params.n_surrogate_samples - n_init_samples
+        acquisition_init = RandomAcquisition(variables,
+                                             n_samples=n_init_samples)
         if bolfi_params.sync is True:
             acquisition = BOLFI_ML_SyncAcquisition(
                     exploration_rate=bolfi_params.exploration_rate,
                     opt_iterations=bolfi_params.opt_iterations,
                     model=gpmodel,
-                    n_samples=bolfi_params.n_surrogate_samples)
+                    n_samples=n_acq_samples)
         else:
             acquisition = BOLFI_ML_AsyncAcquisition(
                     exploration_rate=bolfi_params.exploration_rate,
@@ -547,7 +552,7 @@ class BOLFIModelWrapper():
                     rbf_scale=bolfi_params.rbf_scale,
                     rbf_amplitude=bolfi_params.rbf_amplitude,
                     model=gpmodel,
-                    n_samples=bolfi_params.n_surrogate_samples)
+                    n_samples=n_acq_samples)
         model = elfi.Simulator('model',
                         elfi.tools.vectorize(self.simulator),
                         *variables,
@@ -562,7 +567,7 @@ class BOLFIModelWrapper():
                         batch_size=bolfi_params.batch_size,
                         store=store,
                         model=gpmodel,
-                        acquisition=acquisition,
+                        acquisition=acquisition_init + acquisition,
                         sync=bolfi_params.sync,
                         bounds=bounds,
                         client=client)

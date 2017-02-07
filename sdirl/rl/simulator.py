@@ -158,7 +158,7 @@ class RLAgent(LearningAgent):
         """
         module = SparseActionValueTable(n_actions, random_state, softq=softq)
         module.initialize(0.0)
-        learner = EpisodeQ(alpha=0.3, gamma=0.998)
+        learner = EpisodeQ(alpha=0.1, gamma=0.98)
         learner.explorer = EGreedyExplorer(random_state, epsilon=0.1, decay=1.0)
         LearningAgent.__init__(self, module, learner)
 
