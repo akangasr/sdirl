@@ -11,7 +11,7 @@ import elfi
 from elfi import InferenceTask
 from elfi.bo.gpy_model import GPyModel
 from elfi.bo.acquisition import *
-from elfi.methods import BOLFI
+from elfi.methods import BOLFI, BolfiAcquisition, AsyncBolfiAcquisition
 from elfi.posteriors import BolfiPosterior
 
 import dask
@@ -136,13 +136,13 @@ class BolfiParams():  # TODO: add this to elfi?
         return n_init_samples, n_acq_samples
 
 
-class BOLFI_ML_SyncAcquisition(SecondDerivativeNoiseMixin, LCBAcquisition):
+class BolfiMLAcquisition(SecondDerivativeNoiseMixin, LCBAcquisition):
     """ Acquisition function for synchronous ML inference with BOLFI
     """
     pass
 
 
-class BOLFI_ML_AsyncAcquisition(RbfAtPendingPointsMixin, LCBAcquisition):
+class AsyncBolfiMLAcquisition(RbfAtPendingPointsMixin, LCBAcquisition):
     """ Acquisition function for asynchronous ML inference with BOLFI
     """
     pass
@@ -153,15 +153,15 @@ class BolfiFactory():  # TODO: add this to elfi?
 
     Parameters
     ----------
-    params : BolfiParams
     task : elfi.InferenceTask
+    params : BolfiParams
     """
-    def __init__(self, params, task):
-        self.params = params
+    def __init__(self, task, params):
         self.task = task
+        self.params = params
         if len(self.task.parameters) < 1:
             raise ValueError("Task must have at least one parameter.")
-        if len(self.params.bounds) != self.task.parameters:
+        if len(self.params.bounds) != len(self.task.parameters):
             raise ValueError("Task must have as many parameters (was {}) as there are bounds in parameters (was {})."\
                     .format(len(self.task.parameters), len(self.params.bounds)))
 
@@ -176,7 +176,6 @@ class BolfiFactory():  # TODO: add this to elfi?
                         max_opt_iters=self.params.gp_params_max_opt_iters)
 
     def _get_new_acquisition(self, gpmodel):
-        assert hasattr(self, gpmodel)
         n_init_samples, n_acq_samples = self.params.number_of_init_and_acq_samples
         acquisition_init = RandomAcquisition(self.task.parameters,
                                              n_samples=n_init_samples)
@@ -185,13 +184,21 @@ class BolfiFactory():  # TODO: add this to elfi?
             logger.warning("Only initial random samples")
             return acquisition_init
         if self.params.sync is True:
-            acquisition = BOLFI_ML_SyncAcquisition(
+            if self.params.inference_type == InferenceType.ML:
+                cls = BolfiMLAcquisition
+            else:
+                cls = BolfiAcquisition
+            acquisition = cls(
                     exploration_rate=self.params.exploration_rate,
                     opt_iterations=self.params.acq_opt_iterations,
-                    model=self.gpmodel,
+                    model=gpmodel,
                     n_samples=n_acq_samples)
         else:
-            acquisition = BOLFI_ML_AsyncAcquisition(
+            if self.params.inference_type == InferenceType.ML:
+                cls = AsyncBolfiMLAcquisition
+            else:
+                cls = AsyncBolfiAcquisition
+            acquisition = cls(
                     exploration_rate=self.params.exploration_rate,
                     opt_iterations=self.params.acq_opt_iterations,
                     rbf_scale=self.params.rbf_scale,
