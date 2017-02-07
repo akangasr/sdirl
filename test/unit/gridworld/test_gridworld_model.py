@@ -2,6 +2,10 @@ import pytest
 slow = pytest.mark.skipif(
     not pytest.config.getoption("--slow"),
     reason="need --slow option to run")
+vslow = pytest.mark.skipif(
+    not pytest.config.getoption("--vslow"),
+    reason="need --vslow option to run")
+
 
 from collections import defaultdict
 import numpy as np
@@ -226,7 +230,7 @@ class TestGridWorldModel():
         assert policy(State(3,4), Action.UP) == 1.0
         assert policy(State(4,4), Action.LEFT) == 1.0
 
-    @slow  # ~3h
+    @vslow  # ~3h
     def test_loglikelihood_results_are_accurate(self):
         rs = np.random.RandomState(1)
         obs = list()
