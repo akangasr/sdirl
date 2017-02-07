@@ -315,9 +315,9 @@ class BOLFIExperimentResults():
     def to_dict(self):
         return {
                 "posteriors": [BolfiPosteriorUtility.to_dict(p) for p in self.posteriors],
-                "errors_L2": self.errors_L2,
-                "errors_ord": self.errors_ord,
-                "errors_prop": self.errors_prop,
+                "errors_L2": [str(v) for v in self.errors_L2],
+                "errors_ord": [str(v) for v in self.errors_ord],
+                "errors_prop": [str(v) for v in self.errors_prop],
                 "duration": self.duration,
                 }
 
