@@ -158,6 +158,7 @@ class TestBolfiFactory():
         else:
             assert bolfi.store is None
 
+    @slow  # ~5s
     def test_constructs_correct_inference_for_simple_model(self):
         np.random.seed(1)
         itask = create_simple_inference_task()
@@ -166,3 +167,20 @@ class TestBolfiFactory():
         bolfi = bf.get_new_instance()
         self.assert_bolfi_matches_params(bolfi, params)
         bolfi.infer()
+
+    def test_raises_error_when_task_has_no_parameters(self):
+        np.random.seed(1)
+        itask = create_simple_inference_task()
+        itask.parameters = list()
+        params = self.get_default_bolfi_params_for_simple_inference_task()
+        with pytest.raises(ValueError):
+            bf = BolfiFactory(itask, params)
+
+    def test_raises_error_when_task_parameters_do_not_match_bounds(self):
+        np.random.seed(1)
+        itask = create_simple_inference_task()
+        params = self.get_default_bolfi_params_for_simple_inference_task()
+        params.bounds = params.bounds + ((0,1),)  # add extra bound
+        with pytest.raises(ValueError):
+            bf = BolfiFactory(itask, params)
+
