@@ -20,6 +20,9 @@ from distributed import Client
 import logging
 logger = logging.getLogger(__name__)
 
+""" Extensions and helper functions for the ELFI library
+"""
+
 class SerializableBolfiPosterior(BolfiPosterior):  # TODO: add this to elfi?
     """ Extends BolfiPosterior so that it can be serialized, deserialized and constructed from a model
     """

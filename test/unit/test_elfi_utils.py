@@ -10,7 +10,7 @@ import GPy
 
 from elfi.bo.gpy_model import GPyModel
 from elfi import InferenceTask
-from sdirl.bolfi_utils import *
+from sdirl.elfi_utils import *
 
 
 def create_simple_gpmodel():
