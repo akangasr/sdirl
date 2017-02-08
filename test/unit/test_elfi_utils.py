@@ -64,17 +64,20 @@ def create_simple_modelbase_object():
     prior = ParameterPrior("uniform", (1, 1))
     bounds = (1, 2)
     param = ModelParameter("param name", prior, bounds)
-    summary = ObservationSummary("summary name", lambda x : np.atleast_2d([1]))
-    model = ModelBase("model name", [param], [summary], dummy_discrepancy)
-    model.simulate = dummy_simulator
+    summary = ObservationSummary("summary name", dummy_summary)
+    model = ModelBase("model name", [param], dummy_simulator, [summary], dummy_discrepancy)
     model.ground_truth = [1.0]
     return model
 
-def dummy_discrepancy(arg1, arg2):
-    return np.atleast_2d([1])
-
 def dummy_simulator(*args, random_state=None):
     return np.atleast_2d([1])
+
+def dummy_summary(data=None):
+    return np.atleast_2d([2])
+
+def dummy_discrepancy(arg1=None, arg2=None):
+    return np.atleast_2d([2])
+
 
 class TestInferenceTaskFactory():
 
@@ -83,13 +86,13 @@ class TestInferenceTaskFactory():
             assert p1.name == p2.name
             print(p1.__dict__)
             assert p2.prior.distribution_name in p1.distribution.__class__.__name__
-        assert itask.discrepancy._operation == model.discrepancy
+        np.testing.assert_array_equal(itask.discrepancy._operation(), model.discrepancy()[None,:])
         for s1, s2 in zip(itask.discrepancy._parents, model.summaries):
             assert s1.name == s2.name
-            assert s1._operation == s2.function
+            np.testing.assert_array_equal(s1._operation(), s2.function()[None,:])
         m1 = itask.discrepancy._parents[0]._parents[0]
         assert m1.name == model.name
-        assert m1._operation == model.simulate
+        np.testing.assert_array_equal(m1._operation(), model.simulator()[None,:])
         for p1a, p1b in zip(m1._parents, itask.parameters):
             assert p1a == p1b
 

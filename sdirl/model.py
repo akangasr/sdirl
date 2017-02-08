@@ -70,6 +70,23 @@ class ObservationSummary():
         self.name = name
         self.function = function
 
+class ObservationDataset():
+    """ Encapsulated observation dataset
+
+    Parameters
+    ----------
+    data : contained data
+    parameter_values (optional) : what values were used to simulate the dataset
+    name (optional) : name for dataset
+    """
+    def __init__(self,
+                 data = None,
+                 parameter_values = None,
+                 name = None):
+        self.data = data
+        self.parameter_values = parameter_values
+        self.name = name
+
 class ModelBase():
     """ Base class for models
 
@@ -78,26 +95,28 @@ class ModelBase():
     name : string
     parameters : list of ModelParameter
     summaries : list of ObservationSummary
+    simulator : callable f(*args, random_state) -> ndarray([ObservationDataset])
+    summaries : list of ObservationSummary
+    discrepancy : callable f(summaries1, summaries2) -> value
+    observation : data
     """
     def __init__(self,
                  name = "model",
                  parameters = list(),
+                 simulator = None,
                  summaries = list(),
                  discrepancy = None,
                  observation = None,
                  ground_truth = None):
         self.name = name
         self.parameters = parameters
+        self.simulator = simulator
         self.summaries = summaries
         self.discrepancy = discrepancy
         self.observation = observation
         self.ground_truth = ground_truth
 
-    def simulate(*param_values, random_state = None):
-        raise NotImplementedError
-
-
-class Model():
+class Model(ModelBase):
     """ Interface for models used in SDIRL studies
 
     Parameters

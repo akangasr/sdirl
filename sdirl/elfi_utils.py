@@ -12,6 +12,7 @@ from elfi.bo.gpy_model import GPyModel
 from elfi.bo.acquisition import *
 from elfi.methods import BOLFI, BolfiAcquisition, AsyncBolfiAcquisition
 from elfi.posteriors import BolfiPosterior
+from elfi.tools import vectorize
 
 from sdirl.environment import Environment
 
@@ -51,20 +52,20 @@ class InferenceTaskFactory():
         if self.model.observation is not None:
             y = self.model.observation
         elif self.model.ground_truth is not None:
-            y = self.model.simulate(*self.model.ground_truth, random_state=random_state)
+            y = self.model.simulator(*self.model.ground_truth, random_state=random_state)
         Y = elfi.Simulator(self.model.name,
-                           self.model.simulate,
+                           vectorize(self.model.simulator),
                            *parameters,
                            observed=y,
                            inference_task=itask)
         summaries = list()
         for summary in self.model.summaries:
             summaries.append(elfi.Summary(summary.name,
-                                         summary.function,
+                                         vectorize(summary.function),
                                          Y,
                                          inference_task=itask))
         d = elfi.Discrepancy('discrepancy',
-                             self.model.discrepancy,
+                             vectorize(self.model.discrepancy),
                              *summaries,
                              inference_task=itask)
         itask.parameters = parameters
