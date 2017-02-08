@@ -112,7 +112,7 @@ class GridGenerator():
     def __init__(self, world_seed=0):
         self.world_seed = world_seed
 
-    def generate_grid(self, grid_size, n_features, target_state):
+    def generate_grid(self, grid_size, n_features, goal_state):
         """ Returns grid as a dict[state] = f_vec
         """
         raise NotImplementedError
@@ -177,7 +177,7 @@ class UniformGrid(GridGenerator):
         super(UniformGrid, self).__init__(world_seed)
         self.p_feature = p_feature
 
-    def generate_grid(self, grid_size, n_features, target_state):
+    def generate_grid(self, grid_size, n_features, goal_state):
         rs = np.random.RandomState(self.world_seed)
         grid = Grid(grid_size, n_features+1)
         for x in range(grid_size):
@@ -187,12 +187,12 @@ class UniformGrid(GridGenerator):
                 for k in range(n_features+1):
                     if k == 0:
                         # first feature is unique to goal state
-                        if state == target_state:
+                        if state == goal_state:
                             features.append(1)
                         else:
                             features.append(0)
                     else:
-                        if state == target_state:
+                        if state == goal_state:
                             # goal state doesn't have other features
                             features.append(0)
                         elif rs.uniform(0,1) < self.p_feature:
@@ -215,7 +215,7 @@ class WallsGrid(GridGenerator):
         super(WallsGrid, self).__init__(world_seed)
         self.n_walls_per_feature = n_walls_per_feature
 
-    def generate_grid(self, grid_size, n_features, target_state):
+    def generate_grid(self, grid_size, n_features, goal_state):
         rs = np.random.RandomState(self.world_seed)
         grid = Grid(grid_size, n_features+1)
         for x in range(grid_size):
@@ -238,7 +238,7 @@ class WallsGrid(GridGenerator):
                         features = grid[state]
                         features[k] = 1
                         grid[state] = features
-        grid[target_state] = [1] + [0]*n_features
+        grid[goal_state] = [1] + [0]*n_features
         return grid
 
     def to_dict(self):
@@ -281,7 +281,7 @@ class GridWorldTask(ParametricLoggingEpisodicTask):
         # this function should be deterministic and without side effects
         if self.env.n_actions >= self.max_number_of_actions_per_session:
             return True
-        elif self.env.state == self.env.target_state:
+        elif self.env.state == self.env.goal_state:
             return True
         return False
 
@@ -298,15 +298,15 @@ class GridWorldEnvironment(ParametricLoggingEnvironment):
         probability of agent moving randomly during action
     world_seed : int
         seed for generating world features
-    target_state : State
-        target location
+    goal_state : State
+        goal location
     """
 
     def __init__(self,
             grid_size=3,
             prob_rnd_move=0.1,
             n_features=2,
-            target_state=None,
+            goal_state=None,
             initial_state_generator=None,
             grid_generator=None
             ):
@@ -315,16 +315,16 @@ class GridWorldEnvironment(ParametricLoggingEnvironment):
 
         assert grid_size > 0, grid_size
         assert 0 <= prob_rnd_move <= 1, prob_rnd_move
-        assert target_state is not None, target_state
+        assert goal_state is not None, goal_state
 
         self.grid_size = grid_size
         self.prob_rnd_move = prob_rnd_move
         self.n_features = n_features
-        self.target_state = target_state
+        self.goal_state = goal_state
         self.initial_state_generator = initial_state_generator
         self.grid_generator = grid_generator
         self.actions = [Action.UP, Action.DOWN, Action.LEFT, Action.RIGHT]
-        self.grid = self.grid_generator.generate_grid(self.grid_size, self.n_features, self.target_state)
+        self.grid = self.grid_generator.generate_grid(self.grid_size, self.n_features, self.goal_state)
         self.log_session_variables = ["grid", "start_loc_id"]
 
         # pybrain variables
@@ -343,7 +343,7 @@ class GridWorldEnvironment(ParametricLoggingEnvironment):
                 "n_features": self.n_features,
                 "initial_state_generator": self.initial_state_generator.to_dict(),
                 "grid_generator": self.grid_generator.to_dict(),
-                "target_state": str(self.target_state),
+                "goal_state": str(self.goal_state),
                 }
 
     def print_grid(self):
@@ -382,7 +382,7 @@ class GridWorldEnvironment(ParametricLoggingEnvironment):
         self._start_log_for_new_session()
 
     def in_goal(self):
-        return self.state == self.target_state
+        return self.state == self.goal_state
 
     def performAction(self, action):
         """ Changes the state of the environment based on agent action """

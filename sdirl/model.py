@@ -14,7 +14,6 @@ from elfi.wrapper import Wrapper
 from elfi.bo.gpy_model import GPyModel
 
 from sdirl.rl.utils import PathTreeIterator
-from sdirl.gridworldmodel.mdp import State
 
 import json
 import GPy
@@ -39,6 +38,15 @@ class ParameterPrior():
         self.distribution_name = distribution_name
         self.params = params
 
+    def to_dict(self):
+        """ Returns a json-serializable dict
+        """
+        return {
+                "distribution_name" : self.distribution_name,
+                "params" : self.params
+                }
+
+
 class ModelParameter():
     """ Encapsulated model parameter
 
@@ -56,6 +64,16 @@ class ModelParameter():
         self.prior = prior
         self.bounds = bounds
 
+    def to_dict(self):
+        """ Returns a json-serializable dict
+        """
+        return {
+                "name" : self.name,
+                "prior" : self.prior.to_dict(),
+                "bounds" : self.bounds
+                }
+
+
 class ObservationSummary():
     """ Encapsulated summary function
 
@@ -69,6 +87,15 @@ class ObservationSummary():
                  function = None):
         self.name = name
         self.function = function
+
+    def to_dict(self):
+        """ Returns a json-serializable dict
+        """
+        return {
+                "name" : self.name,
+                "function" : self.function.__name__,
+                }
+
 
 class ObservationDataset():
     """ Encapsulated observation dataset
@@ -86,6 +113,24 @@ class ObservationDataset():
         self.data = data
         self.parameter_values = parameter_values
         self.name = name
+
+    def to_dict(self):
+        """ Returns a json-serializable dict
+        """
+        if isinstance(self.data, list):
+            ser_fun = getattr(self.data[0], "to_dict", None)
+            if ser_fun is not None:
+                serdata = [d.to_dict() for d in self.data]
+            else:
+                serdata = [str(d) for d in self.data]
+        else:
+            serdata = str(self.data)
+        return {
+                "data" : serdata,
+                "name" : "" if self.name is None else self.name,
+                "parameter_values" : "" if self.parameter_values is None else [str(v) for v in self.parameter_values],
+                }
+
 
 class ModelBase():
     """ Base class for models
@@ -110,190 +155,90 @@ class ModelBase():
                  ground_truth = None):
         self.name = name
         self.parameters = parameters
+        for parameter in self.parameters:
+            if isinstance(parameter, ModelParameter) is False:
+                logger.warning("Parameter {} does not implement ModelParameter"
+                        .format(parameter))
         self.simulator = simulator
         self.summaries = summaries
+        for summary in self.summaries:
+            if isinstance(summary, ObservationSummary) is False:
+                logger.warning("Summary {} does not implement ObservationSummary"
+                        .format(summary))
         self.discrepancy = discrepancy
         self.observation = observation
         self.ground_truth = ground_truth
 
-class Model(ModelBase):
-    """ Interface for models used in SDIRL studies
-
-    Parameters
-    ----------
-    variable_names : list of strings
-    """
-    def __init__(self, variable_names):
-        self.variable_names = variable_names
-        self.n_var = len(self.variable_names)
-
     def to_dict(self):
-        """ Returns a json-serialized dict
+        """ Returns a json-serializable dict
         """
-        ret = {
-                "variable_names" : self.variable_names,
-                "n_var" : self.n_var,
+        return {
+                "name" : self.name,
+                "parameters" : [p.to_dict() for p in self.parameters],
+                "simulator" : self.simulator.__name__,
+                "summaries" : [s.to_dict() for s in self.summaries],
+                "discrepancy" : self.discrepancy.__name__,
+                "observation" : "" if self.observation is None else self.observation.to_dict(),
+                "ground_truth" : "" if self.ground_truth is None else [str(v) for v in self.ground_truth],
                 }
-        return ret
-
-    def evaluate_loglikelihood(self, variables, observations, random_state):
-        """ Evaluates logarithm of unnormalized likelihood of variables given observations.
-
-        Parameters
-        ----------
-        variables : list of values, matching variable_names
-        observations : dataset compatible with model
-        random_state : random value source
-
-        Returns
-        -------
-        Log unnormalized likelihood
-        """
-        raise NotImplementedError("Subclass implements")
-
-    def evaluate_discrepancy(self, variables, observations, random_state):
-        """ Computes a discrepancy value that correlates with the
-            likelihood of variables given observations.
-
-        Parameters
-        ----------
-        variables : list of values, matching variable_names
-        observations : dataset compatible with model
-        random_state : random value source
-
-        Returns
-        -------
-        Non-negative discrepancy value
-        """
-        sim_obs = self.simulate_observations(variables, random_state)
-        return self.calculate_discrepancy(observations, sim_obs)
-
-    def simulate_observations(self, variables, random_state):
-        """ Simulates observations from model with variable values.
-
-        Parameters
-        ----------
-        variables : list of values, matching variable_names
-        random_state : random value source
-
-        Returns
-        -------
-        Dataset compatible with model
-        """
-        raise NotImplementedError("Subclass implements")
-
-    def calculate_discrepancy(self, observations, sim_observations):
-        """ Evaluate discrepancy of two observations.
-
-        Parameters
-        ----------
-        observations: dataset compatible with model
-        sim_observations: dataset compatible with model
-
-        Returns
-        -------
-        Non-negative discrepancy value
-        """
-        raise NotImplementedError("Subclass implements")
-
-    def get_bounds(self):
-        """ Return box constraints for the variables of the model.
-
-        Returns
-        -------
-        n-tuple of 2-tuples of values, n = number of variables
-        eg: ((0,1), (0,2), (1,2)) for 3 variables
-        """
-        raise NotImplementedError("Subclass implements")
 
 
-class ELFIModel(Model):
-
-    def __init__(self, variable_names):
-        super(ELFIModel, self).__init__(variable_names)
-        self.kernel_class = GPy.kern.RBF
-        self.noise_var = 0.05
-        self.kernel_var = 0.05
-        self.kernel_scale = 0.1
-        self.optimizer = "scg"
-        self.max_opt_iters = 50
-
-    def to_dict(self):
-        ret = super(ELFIModel, self).to_dict()
-        ret["kernel_class"] = self.kernel_class.__name__
-        ret["noise_var"] = self.noise_var
-        ret["kernel_var"] = self.kernel_var
-        ret["kernel_scale"] = self.kernel_scale
-        ret["optimizer"] = self.optimizer
-        ret["max_opt_iters"] = self.max_opt_iters
-        return ret
-
-    def get_elfi_gpmodel(self, approximate):
-        """ Returns a gaussian process model for use in ELFI.
-
-        Parameters
-        ----------
-        approximate : bool
-            if true, returns model for discrepancy values
-            if false, returns model for likelihood values
-        """
-        return GPyModel(input_dim=len(self.variable_names),
-                        bounds=self.get_bounds(),
-                        kernel_class=self.kernel_class,
-                        kernel_var=self.kernel_var,
-                        kernel_scale=self.kernel_scale,
-                        noise_var=self.noise_var,
-                        optimizer=self.optimizer,
-                        max_opt_iters=self.max_opt_iters)
-
-    def get_elfi_variables(self, inference_task):
-        """ Returns a list of elfi.Prior objects for use in ELFI.
-
-        Parameters
-        ----------
-        inference_task : elfi.InferenceTask
-            inference task to add priors to
-        """
-        elfi_variables = list()
-        bounds = self.get_bounds()
-        for v, b in zip(self.variable_names, bounds):
-            start = b[0]
-            width = b[1] - b[0]
-            v = elfi.Prior(v, "uniform", start, width, inference_task=inference_task)
-            elfi_variables.append(v)
-        return elfi_variables
+class DummyValue():
+    """ Used to pass values from simulator to discrepancy function for
+        computing the likelihood of the observations
+    """
+    def __init__(self, parameters, random_state):
+        self.parameters = parameters
+        self.random_state = random_state
 
 
-class RLModel(Model):
-    """ RL based model
+class SDIRLModel(ModelBase):
+    """ Interface for models used in SDIRL studies.
+
+    Built using SDIRLModelFactory
     """
 
-    def __init__(self, variable_names, verbose):
-        super(RLModel, self).__init__(variable_names)
-        self.verbose = verbose
+    def __init__(self):
+        super(SDIRLModel, self).__init__()
         self.env = None
         self.task = None
-        self.rl = None  # RLModel
+        self.rl = None
         self.goal_state = None
         self.path_max_len = None
         self._paths = None
-        self.prev_variables = []
+        self._prev_variables = []
         self._precomp_obs_logprobs = dict()
 
     def to_dict(self):
-        ret = super(RLModel, self).to_dict()
-        ret["verbose"] = int(self.verbose)
+        ret = super(SDIRLModel, self).to_dict()
         ret["env"] = self.env.to_dict()
         ret["task"] = self.task.to_dict()
         ret["rl"] = self.rl.to_dict()
-        ret["goal_state"] = self.goal_state
+        ret["goal_state"] = self.goal_state.to_dict()
         ret["path_max_len"] = self.path_max_len
         return ret
 
-    def evaluate_loglikelihood(self, variables, observations, random_state):
+
+    # Exact inference using logl
+    def dummy_simulator(self, *parameters, random_state=None):
+        return np.atleast_1d(NullValue(parameters, random_state))
+
+    def passthrough_summary_function(self, data):
+        if isinstance(data[0], DummyValue):
+            return data
+        else:
+            return self.summary_function(data)
+
+    def logl_discrepancy(sim_data, obs_data):
+        parameters = sim_data[0][0].parameters
+        random_state = sim_data[0][0].random_state
+        observations = obs_data[0]
+        return -1 * self.evaluate_loglikelihood(parameters, observations, random_state)
+
+    def evaluate_loglikelihood(self, parameters, observations, random_state):
         assert len(observations) > 0
         ind_log_obs_probs = list()
-        policy = self._get_optimal_policy(variables, random_state)
+        policy = self._get_optimal_policy(parameters, random_state)
         logger.info("Evaluating loglikelihood of {} observations".format(len(observations)))
         start_time1 = time.time()
         for obs_i in observations:
@@ -328,49 +273,6 @@ class RLModel(Model):
         duration1 = end_time1 - start_time1
         logger.info("Logl evaluated in {} seconds".format(duration1))
         return sum(ind_log_obs_probs)
-
-    def simulate_observations(self, variables, random_state):
-        """ Simulates observations from model with variable values.
-
-        Parameters
-        ----------
-        variables : list of values, matching variable_names
-        random_state : random value source
-
-        Returns
-        -------
-        Dataset compatible with model
-        """
-        self._train_model_if_needed(variables, random_state)
-        obs = self.rl.simulate(random_state=random_state)
-        return self.summarize(obs)
-
-    def summarize(self, raw_observation):
-        """ Summary observation of simulated data
-        """
-        raise NotImplementedError("Subclass implements")
-
-    def _get_optimal_policy(self, variables, random_state):
-        """ Returns a function pointer f(state, action) -> p(action|state) that defines the
-            optimal policy.
-        """
-        self._train_model_if_needed(variables, random_state)
-        return self.rl.get_policy()
-
-    def print_model(self):
-        """ Do possible visualization of trained model
-        """
-        pass
-
-    def _train_model_if_needed(self, variables, random_state):
-        """ Trains the model if variables have changed
-        """
-        if not np.array_equal(self.prev_variables, variables):
-            self.rl.train_model(*variables, random_state=random_state)
-            self.prev_variables = variables
-            self._precomp_obs_logprobs = dict()
-            if self.verbose is True:
-                self.print_model()
 
     def _fill_path_tree(self, obs, full_path_len, prune=True):
         """ Recursively fill path tree starting from obs
@@ -422,36 +324,96 @@ class RLModel(Model):
             logp += np.log(act_i_prob) + np.log(tra_i_prob)
         return np.exp(logp)
 
+    def _get_optimal_policy(self, variables, random_state):
+        """ Returns a function pointer f(state, action) -> p(action|state) that defines the
+            optimal policy.
+        """
+        self._train_model_if_needed(variables, random_state)
+        return self.rl.get_policy()
 
-class SimpleGaussianModel(ELFIModel):
-    """ Simple example model, used for testing etc.
+
+    # Approximate inference using discrepancy
+    def simulate_observations(self, *parameters, random_state=None):
+        self._train_model_if_needed(parameters, random_state)
+        obs = self.rl.simulate(random_state=random_state)
+        return np.atleast_1d([ObservationDataset(obs, parameters, "simulated")])
+
+    def summary_function(self, data):
+        raise NotImplementedError
+
+    def calculate_discrepancy(sim_data, obs_data):
+        raise NotImplementedError
+
+
+    # Common functions
+    def print_model(self):
+        """ Do possible visualization of trained model
+        """
+        pass
+
+    def _train_model_if_needed(self, variables, random_state):
+        """ Trains the model if variables have changed
+        """
+        if not np.array_equal(self._prev_variables, variables):
+            self.rl.train_model(*variables, random_state=random_state)
+            self._prev_variables = variables
+            self._precomp_obs_logprobs = dict()
+            self.print_model()
+
+
+class SDIRLModelFactory():
+    """ Factory for constructing SDIRLModel objects
     """
+    def __init__(self,
+                 name,
+                 parameters,
+                 env,
+                 task,
+                 rl,
+                 goal_state,
+                 path_max_len,
+                 klass=SDIRLModel,
+                 observation=None,
+                 ground_truth=None):
+        self.name = name
+        self.parameters = parameters
+        self.env = env
+        self.task = task
+        self.rl = rl
+        self.goal_state = goal_state
+        self.path_max_len = path_max_len
+        self.klass = klass
+        self.observation = observation
+        self.ground_truth = ground_truth
+        if getattr(self.env, "to_dict", None) is None:
+            raise ValueError("Env should implement to_dict()")
+        if getattr(self.task, "to_dict", None) is None:
+            raise ValueError("Task should implement to_dict()")
+        if getattr(self.rl, "to_dict", None) is None:
+            raise ValueError("RL should implement to_dict()")
+        if getattr(self.goal_state, "to_dict", None) is None:
+            raise ValueError("Goal state should implement to_dict()")
+        if self.ground_truth is None and self.observation is None:
+            raise ValueError("Should provide either ground truth or observation")
 
-    def __init__(self, variable_names):
-        super(SimpleGaussianModel, self).__init__(variable_names)
-        assert len(variable_names) == 1
-        self.elfi_variables = list()
-        self.scale = 0.1
-        self.nval = 20
-        self.kernel_scale = 1.0
-        self.kernel_var = self.scale
-
-    def evaluate_loglikelihood(self, variables, observations, random_state=None):
-        assert len(variables) == 1, variables
-        ind_log_obs_probs = list()
-        for obs_i in observations:
-            prob_i = sp.stats.norm.pdf(obs_i, loc=variables[0], scale=self.scale)
-            ind_log_obs_probs.append(np.log(prob_i))
-        ret = sum(ind_log_obs_probs) / 1000.0
-        return ret
-
-    def simulate_observations(self, variables, random_state):
-        assert len(variables) == 1, variables
-        return random_state.normal(variables[0], scale=self.scale, size=self.nval)
-
-    def calculate_discrepancy(self, observations1, observations2):
-        return np.abs(np.mean(observations1) - np.mean(observations2))
-
-    def get_bounds(self):
-        return ((-2, 2),)
+    def get_new_instance(self, approximate):
+        model = self.klass()
+        model.name = self.name
+        model.parameters = self.parameters
+        model.observation = self.observation
+        model.ground_truth = self.ground_truth
+        model.env = self.env
+        model.task = self.task
+        model.rl = self.rl
+        model.goal_state = self.goal_state
+        model.path_max_len = self.path_max_len
+        if approximate is True:
+            model.simulator = model.simulate_observations
+            model.summaries = [ObservationSummary("summary", model.summary_function)]
+            model.discrepancy = model.calculate_discrepancy
+        else:
+            model.simulator = model.dummy_simulator
+            model.summaries = [ObservationSummary("passthrough", model.passthrough_summary_function)]
+            model.discrepancy = model.logl_discrepancy
+        return model
 

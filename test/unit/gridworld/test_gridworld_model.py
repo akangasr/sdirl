@@ -10,8 +10,8 @@ vslow = pytest.mark.skipif(
 from collections import defaultdict
 import numpy as np
 
-from sdirl.gridworldmodel.model import *
-from sdirl.gridworldmodel.mdp import *
+from sdirl.gridworld.model import *
+from sdirl.gridworld.mdp import *
 from sdirl.rl.utils import Path, Transition
 
 def trivial_model(training_episodes=100):
