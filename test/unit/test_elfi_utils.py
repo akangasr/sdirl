@@ -10,7 +10,9 @@ import GPy
 
 from elfi.bo.gpy_model import GPyModel
 from elfi import InferenceTask
+
 from sdirl.elfi_utils import *
+from sdirl.model import *
 
 
 def create_simple_gpmodel():
@@ -57,6 +59,45 @@ def create_simple_inference_task():
     d = elfi.Discrepancy('d', distance, s1, s2, inference_task=itask)
     itask.parameters = [t1, t2]
     return itask
+
+def create_simple_modelbase_object():
+    prior = ParameterPrior("uniform", (1, 1))
+    bounds = (1, 2)
+    param = ModelParameter("param name", prior, bounds)
+    summary = ObservationSummary("summary name", lambda x : np.atleast_2d([1]))
+    model = ModelBase("model name", [param], [summary], dummy_discrepancy)
+    model.simulate = dummy_simulator
+    model.ground_truth = [1.0]
+    return model
+
+def dummy_discrepancy(arg1, arg2):
+    return np.atleast_2d([1])
+
+def dummy_simulator(*args, random_state=None):
+    return np.atleast_2d([1])
+
+class TestInferenceTaskFactory():
+
+    def assert_inference_task_matches_modelbase_object(self, itask, model):
+        for p1, p2 in zip(itask.parameters, model.parameters):
+            assert p1.name == p2.name
+            print(p1.__dict__)
+            assert p2.prior.distribution_name in p1.distribution.__class__.__name__
+        assert itask.discrepancy._operation == model.discrepancy
+        for s1, s2 in zip(itask.discrepancy._parents, model.summaries):
+            assert s1.name == s2.name
+            assert s1._operation == s2.function
+        m1 = itask.discrepancy._parents[0]._parents[0]
+        assert m1.name == model.name
+        assert m1._operation == model.simulate
+        for p1a, p1b in zip(m1._parents, itask.parameters):
+            assert p1a == p1b
+
+    def test_sensible_inference_task_can_be_constructed_from_simple_modelbase_object(self):
+        model = create_simple_modelbase_object()
+        itf = InferenceTaskFactory(model)
+        itask = itf.get_new_instance()
+        self.assert_inference_task_matches_modelbase_object(itask, model)
 
 
 class TestSerializableBolfiPosterior():

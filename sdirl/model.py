@@ -25,6 +25,77 @@ from functools import partial
 import logging
 logger = logging.getLogger(__name__)
 
+class ParameterPrior():
+    """ Encapsulated parameter prior
+
+    Parameters
+    ----------
+    distribution_name : string, matching scipy.stats distribution names
+    params : tuple of parameters for distribution
+    """
+    def __init__(self,
+                 distribution_name = "uniform",
+                 params = (0, 1)):
+        self.distribution_name = distribution_name
+        self.params = params
+
+class ModelParameter():
+    """ Encapsulated model parameter
+
+    Parameters
+    ----------
+    name : string
+    prior : ParameterPrior
+    bounds : tuple (min value, max value)
+    """
+    def __init__(self,
+                 name = "parameter",
+                 prior = ParameterPrior(),
+                 bounds = (0, 1)):
+        self.name = name
+        self.prior = prior
+        self.bounds = bounds
+
+class ObservationSummary():
+    """ Encapsulated summary function
+
+    Parameters
+    ----------
+    name : string
+    function : callable f(observation) -> summary
+    """
+    def __init__(self,
+                 name = "summary",
+                 function = None):
+        self.name = name
+        self.function = function
+
+class ModelBase():
+    """ Base class for models
+
+    Parameters
+    ----------
+    name : string
+    parameters : list of ModelParameter
+    summaries : list of ObservationSummary
+    """
+    def __init__(self,
+                 name = "model",
+                 parameters = list(),
+                 summaries = list(),
+                 discrepancy = None,
+                 observation = None,
+                 ground_truth = None):
+        self.name = name
+        self.parameters = parameters
+        self.summaries = summaries
+        self.discrepancy = discrepancy
+        self.observation = observation
+        self.ground_truth = ground_truth
+
+    def simulate(*param_values, random_state = None):
+        raise NotImplementedError
+
 
 class Model():
     """ Interface for models used in SDIRL studies

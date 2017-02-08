@@ -8,11 +8,12 @@ import time
 from enum import IntEnum
 
 import elfi
-from elfi import InferenceTask
 from elfi.bo.gpy_model import GPyModel
 from elfi.bo.acquisition import *
 from elfi.methods import BOLFI, BolfiAcquisition, AsyncBolfiAcquisition
 from elfi.posteriors import BolfiPosterior
+
+from sdirl.environment import Environment
 
 import dask
 from distributed import Client
@@ -20,8 +21,55 @@ from distributed import Client
 import logging
 logger = logging.getLogger(__name__)
 
-""" Extensions and helper functions for the ELFI library
+""" Extensions and helper functions for the ELFI library.
+
+InferenceTaskFactory - Constructs an elfi.InferenceTask from sdirl.ModelBase derivative
+SerializableBolfiPosterior - Extends elfi.BolfiPosterior to make it (de)serializable
+BolfiParams - Encapsulates various elfi.BOLFI parameters
+BolfiFactory - Constructs elfi.BOLFI using BolfiParams and an elfi.InferenceTask
 """
+
+class InferenceTaskFactory():
+    """ Factory for constructing elfi.InferenceTask objects from ModelBase
+
+    Parameters
+    ----------
+    model : ModelBase
+    """
+    def __init__(self, model):
+        self.model = model
+
+    def get_new_instance(self):
+        random_state = Environment.get_instance().random_state
+        itask = elfi.InferenceTask(seed=random_state.randint(1e7))
+        parameters = list()
+        for parameter in self.model.parameters:
+            parameters.append(elfi.Prior(parameter.name,
+                                         parameter.prior.distribution_name,
+                                         *parameter.prior.params,
+                                         inference_task=itask))
+        if self.model.observation is not None:
+            y = self.model.observation
+        elif self.model.ground_truth is not None:
+            y = self.model.simulate(*self.model.ground_truth, random_state=random_state)
+        Y = elfi.Simulator(self.model.name,
+                           self.model.simulate,
+                           *parameters,
+                           observed=y,
+                           inference_task=itask)
+        summaries = list()
+        for summary in self.model.summaries:
+            summaries.append(elfi.Summary(summary.name,
+                                         summary.function,
+                                         Y,
+                                         inference_task=itask))
+        d = elfi.Discrepancy('discrepancy',
+                             self.model.discrepancy,
+                             *summaries,
+                             inference_task=itask)
+        itask.parameters = parameters
+        return itask
+
 
 class SerializableBolfiPosterior(BolfiPosterior):  # TODO: add this to elfi?
     """ Extends BolfiPosterior so that it can be serialized, deserialized and constructed from a model
