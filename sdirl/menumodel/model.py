@@ -2,7 +2,7 @@ import numpy as np
 
 from sdirl.menumodel.mdp import SearchEnvironment, SearchTask
 from sdirl.rl.simulator import RLSimulator
-from sdirl.model import RLModel, ELFIModel
+from sdirl.model import SDIRLModel, SDIRLModelFactory, ObservationDataset
 import elfi
 
 import logging
@@ -32,30 +32,27 @@ class Observation():
         return Observation(self.task_completion_time, self.target_present)
 
 
-class MenuSearchModel(RLModel, ELFIModel):
-    """ Menu search model.
-        From Chen et al. CHI 2016
-        Similar as in Kangasraasio et al. CHI 2017
-    """
-
+class MenuSearchFactory(SDIRLModelFactory):
     def __init__(self,
-                 variable_names,
-                 menu_type="semantic",
-                 menu_groups=2,
-                 menu_items_per_group=4,
-                 semantic_levels=3,
-                 gap_between_items=0.75,
-                 prop_target_absent=0.1,
-                 length_observations=True,
-                 p_obs_len_cur=0.95,
-                 p_obs_len_adj=0.89,
-                 n_training_menus=10000,
-                 n_training_episodes=20000000,
-                 n_episodes_per_epoch=20,
-                 n_simulation_episodes=10000,
-                 verbose=True):
-        super(MenuSearchModel, self).__init__(variable_names, verbose)
-        self.env = SearchEnvironment(
+            parameters,
+            menu_type="semantic",
+            menu_groups=2,
+            menu_items_per_group=4,
+            semantic_levels=3,
+            gap_between_items=0.75,
+            prop_target_absent=0.1,
+            length_observations=True,
+            p_obs_len_cur=0.95,
+            p_obs_len_adj=0.89,
+            max_number_of_actions_per_session=20,
+            n_training_menus=10000,
+            n_training_episodes=20000000,
+            n_episodes_per_epoch=20,
+            n_simulation_episodes=10000,
+            observation=None,
+            ground_truth=None):
+
+        env = SearchEnvironment(
                     menu_type=menu_type,
                     menu_groups=menu_groups,
                     menu_items_per_group=menu_items_per_group,
@@ -66,27 +63,35 @@ class MenuSearchModel(RLModel, ELFIModel):
                     p_obs_len_cur=p_obs_len_cur,
                     p_obs_len_adj=p_obs_len_adj,
                     n_training_menus=n_training_menus)
-        self.task = SearchTask(
-                    env=self.env,
-                    max_number_of_actions_per_session=20)
-        self.rl = RLSimulator(
+        task = SearchTask(
+                    env=env,
+                    max_number_of_actions_per_session=max_number_of_actions_per_session)
+        rl = RLSimulator(
                     n_training_episodes=n_training_episodes,
                     n_episodes_per_epoch=n_episodes_per_epoch,
                     n_simulation_episodes=n_simulation_episodes,
-                    var_names=variable_names,
-                    env=self.env,
-                    task=self.task)
+                    parameters=parameters,
+                    env=env,
+                    task=task)
+        super(MenuSearchFactory, self).__init__(name="GridWorld",
+                 parameters=parameters,
+                 env=env,
+                 task=task,
+                 rl=rl,
+                 klass=MenuSearch,
+                 observation=observation,
+                 ground_truth=ground_truth)
 
-        self.noise_var = 0.05
-        self.kernel_var = 1.0
-        self.kernel_scale = 1.0
-        self.optimizer = "scg"
-        self.max_opt_iters = 50
 
-
+class MenuSearch(SDIRLModel):
+    """ Menu search model.
+        From Chen et al. CHI 2016
+        Similar as in Kangasraasio et al. CHI 2017
+    """
     def evaluate_likelihood(variables, observations, random_state=None):
         raise NotImplementedError("Very difficult to evaluate.")
 
+    @staticmethod
     def get_observation_dataset(menu_type="Semantic",
                               allowed_users=list(),
                               excluded_users=list(),
@@ -99,59 +104,27 @@ class MenuSearchModel(RLModel, ELFIModel):
                            excluded_users,
                            trials_per_user_present,
                            trials_per_user_absent)
-        return dataset.get()
+        return ObservationDataset(dataset.get(), name="Bailly")
 
-    def print_model(self):
-        pass
-
-    def summarize(self, raw_observations):
-        return [self.summary(ses["action_duration"], ses["target_present"]) for ses in raw_observations["sessions"]]
-
-    @staticmethod
-    def summary(action_durations, target_present):
-        """ Returns a summary observation of the full path
-        """
-        return Observation(action_durations, target_present)
+    def summary_function(self, obs):
+        return np.atleast_1d(ObservationDataset([Observation(ses["action_duration"], ses["target_present"]) for ses in obs[0].data["sessions"]], name="summary"))
 
     def calculate_discrepancy(self, observations, sim_observations):
-        tct_mean_pre_obs, tct_std_pre_obs = self._tct_mean_std(present=True, obs=observations)
-        tct_mean_pre_sim, tct_std_pre_sim = self._tct_mean_std(present=True, obs=sim_observations)
-        tct_mean_abs_obs, tct_std_abs_obs = self._tct_mean_std(present=False, obs=observations)
-        tct_mean_abs_sim, tct_std_abs_sim = self._tct_mean_std(present=False, obs=sim_observations)
+        tct_mean_pre_obs, tct_std_pre_obs = self._tct_mean_std(present=True, obs=observations[0][0].data)
+        tct_mean_pre_sim, tct_std_pre_sim = self._tct_mean_std(present=True, obs=sim_observations[0][0].data)
+        tct_mean_abs_obs, tct_std_abs_obs = self._tct_mean_std(present=False, obs=observations[0][0].data)
+        tct_mean_abs_sim, tct_std_abs_sim = self._tct_mean_std(present=False, obs=sim_observations[0][0].data)
         disc = np.abs(tct_mean_pre_obs - tct_mean_pre_sim) ** 2 \
                 + np.abs(tct_std_pre_obs - tct_std_pre_sim) \
                 + np.abs(tct_mean_abs_obs - tct_mean_abs_sim) ** 2 \
                 + np.abs(tct_std_abs_obs - tct_std_abs_sim)
         disc /= 1000000.0  # scaling
-        return disc
+        return np.atleast_1d([disc])
 
     def _tct_mean_std(self, present, obs):
         tct = [o.task_completion_time for o in obs if o.target_present is present]
+        if len(tct) == 0:
+            logger.warning("No observations from condition: target present = {}".format(present))
+            return 0.0, 0.0
         return np.mean(tct), np.std(tct)
-
-    def get_bounds(self):
-        ret = []
-        for v in self.variable_names:
-            if v == "focus_duration_100ms":
-                ret.append((1, 6))
-            else:
-                raise ValueError
-        return tuple(ret)
-
-    def get_elfi_variables(self, inference_task):
-        """ Returns a list of elfi.Prior objects for use in ELFI.
-
-        As we do posterior inference return truncated normal distribution as prior
-        """
-        elfi_variables = list()
-        bounds = self.get_bounds()
-        for v, b in zip(self.variable_names, bounds):
-            if v == "focus_duration_100ms":
-                mean = 4.0
-                std = 1.0
-            a, b = (b[0] - mean) / std, (b[1] - mean) / std
-            v = elfi.Prior(v, "truncnorm", a, b, mean, std, inference_task=inference_task)
-            elfi_variables.append(v)
-        return elfi_variables
-
 

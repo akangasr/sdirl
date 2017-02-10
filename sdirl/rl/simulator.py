@@ -19,7 +19,7 @@ class RLSimulator():
             n_training_episodes,
             n_episodes_per_epoch,
             n_simulation_episodes,
-            var_names,
+            parameters,
             env,
             task):
         """
@@ -32,8 +32,7 @@ class RLSimulator():
             Number of training episodes between offline learning
         n_simulation_episodes : int
             Number of episodes to simulate after training
-        var_names : list of strings
-            Names of variables, in order
+        parameters : list of ModelParameter
         env : Environment model
         task : EpisodecTask instance
         softq : bool
@@ -43,7 +42,7 @@ class RLSimulator():
         self.n_training_episodes = n_training_episodes
         self.n_episodes_per_epoch = n_episodes_per_epoch
         self.n_simulation_episodes = n_simulation_episodes
-        self.var_names = var_names
+        self.parameters = parameters
         self.env = env
         self.task = task
         self.softq = False
@@ -54,29 +53,29 @@ class RLSimulator():
                 "n_training_episodes": self.n_training_episodes,
                 "n_episodes_per_epoch": self.n_episodes_per_epoch,
                 "n_simulation_episodes": self.n_simulation_episodes,
-                "var_names": self.var_names,
+                "parameters": [p.to_dict() for p in self.parameters],
                 }
 
-    def train_model(self, *variables, random_state=None):
-        self._set_variables(variables)
+    def train_model(self, parameter_values, random_state=None):
+        self._set_parameter_values(parameter_values)
         self._build_model(random_state)
         self._train_model()
 
-    def __call__(self, *args, random_state=None):
+    def __call__(self, parameter_values, random_state=None):
         """ Simulates data.
         Interfaces to ELFI as a sequential simulator.
 
         Parameters
         ----------
-        args : list of model variables
-            Length should equal length of var_names
+        parameter_values : list of model variables
+            Length should equal length of parameters
         random_state: random number generator
 
         Returns
         -------
         Simulated trajectories as a dict encapsulated in 1D numpy array
         """
-        self.train_model(*args, random_state=random_state)
+        self.train_model(parameter_values, random_state=random_state)
         log_dict = self.simulate(random_state)
         return np.atleast_1d([log_dict])
 
@@ -85,22 +84,22 @@ class RLSimulator():
         """
         return self.agent.get_policy()
 
-    def _set_variables(self, args):
-        """ Parse variable values
+    def _set_parameter_values(self, parameter_values):
+        """ Parse parameter values
         """
-        self.variables = dict()
-        if len(self.var_names) != len(args):
-            raise ValueError("Number of model variables was {}, expected {}"
-                    .format(len(args), len(self.var_names)))
-        for name, val in zip(self.var_names, args):
-            self.variables[name] = val
-        logger.debug("Model parameters: {}".format(self.variables))
+        self.v = dict()
+        if len(self.parameters) != len(parameter_values):
+            raise ValueError("Number of model variables was {} ({}), expected {}"
+                    .format(len(parameter_values), parameter_values, len(self.parameters)))
+        for param, val in zip(self.parameters, parameter_values):
+            self.v[param.name] = val
+        logger.debug("Model parameters: {}".format(self.v))
 
     def _build_model(self, random_state):
         """ Initialize the model
         """
-        self.env.setup(self.variables, random_state)
-        self.task.setup(self.variables)
+        self.env.setup(self.v, random_state)
+        self.task.setup(self.v)
         outdim = self.task.env.outdim
         n_actions = self.task.env.numActions
         self.agent = RLAgent(outdim, n_actions, random_state, self.softq)

@@ -14,27 +14,42 @@ from sdirl.gridworld.model import *
 from sdirl.gridworld.mdp import *
 from sdirl.rl.utils import Path, Transition
 
-def trivial_model(training_episodes=100):
-    return GridWorldModel(["feature1_value"],
-        grid_size=3,
-        step_penalty=0.1,
-        prob_rnd_move=0.0,
-        world_seed=0,
-        n_training_episodes=training_episodes,
-        n_episodes_per_epoch=10,
-        n_simulation_episodes=100)
+class DummyToDictable():
+    def __init__(self, contents=dict()):
+        self.contents = contents
 
-def simple_model(training_episodes=100, simulation_episodes=100, prob_rnd_move=0.1, use_test_grid=False):
+    def to_dict(self):
+        return self.contents
+
+def trivial_model(approximate, training_episodes=100):
+    parameters = [ModelParameter("feature1_value", bounds=(-1,0))]
+    gwf = GridWorldFactory(parameters,
+            grid_size=3,
+            step_penalty=0.1,
+            prob_rnd_move=0.0,
+            world_seed=0,
+            n_training_episodes=training_episodes,
+            n_episodes_per_epoch=10,
+            n_simulation_episodes=100,
+            observation=DummyToDictable())
+    return gwf.get_new_instance(approximate)
+
+def simple_model(approximate, training_episodes=100, simulation_episodes=100, prob_rnd_move=0.1, use_test_grid=False):
     """ Simple 5x5 grid with very specific type of grid
     """
-    model = GridWorldModel(["feature1_value", "feature2_value", "feature3_value", "feature4_value"],
-        grid_size=5,
-        step_penalty=0.1,
-        prob_rnd_move=prob_rnd_move,
-        world_seed=0,
-        n_training_episodes=training_episodes,
-        n_episodes_per_epoch=10,
-        n_simulation_episodes=simulation_episodes)
+    parameters = [ModelParameter("feature1_value", (-1,0)),
+                  ModelParameter("feature2_value", (-1,0)),
+                  ModelParameter("feature3_value", (-1,0)),
+                  ModelParameter("feature4_value", (-1,0))]
+    gwf = GridWorldFactory(parameters,
+            grid_size=5,
+            step_penalty=0.1,
+            prob_rnd_move=prob_rnd_move,
+            world_seed=0,
+            n_training_episodes=training_episodes,
+            n_episodes_per_epoch=10,
+            n_simulation_episodes=simulation_episodes)
+    model = gwf.get_new_instance(approximate)
     if use_test_grid is True:
         model.env.grid = get_test_grid()
     return model
@@ -66,7 +81,7 @@ class TestGridWorldEnvironment():
 
     def test_state_restriction_works_as_expected(self):
         env = GridWorldEnvironment(grid_size=3,
-                target_state=State(0,0),
+                goal_state=State(0,0),
                 grid_generator=UniformGrid())
         for state in [State(0, 0), State(0, 1), State(2, 2)]:
             rstate = env.restrict_state(state)
@@ -80,7 +95,7 @@ class TestGridWorldEnvironment():
 
     def test_returns_correct_number_of_state_transitions(self):
         env = GridWorldEnvironment(grid_size=3,
-                target_state=State(0,0),
+                goal_state=State(0,0),
                 grid_generator=UniformGrid())
         trans_center = env.get_transitions(State(1,1))
         assert len(trans_center) == 4*4
@@ -91,7 +106,7 @@ class TestGridWorldEnvironment():
     def test_transition_functions_are_coherent(self):
         n_iters = 100000
         env = GridWorldEnvironment(grid_size=3,
-                target_state=State(0,0),
+                goal_state=State(0,0),
                 prob_rnd_move=0.3,
                 grid_generator=UniformGrid())
         env.random_state = np.random.RandomState(4)
@@ -108,22 +123,23 @@ class TestGridWorldEnvironment():
                     assert np.abs(emp_trans_prob - trans_prob) < 0.005, transition
 
 
-class TestGridWorldModel():
+class TestGridWorld():
 
     def test_can_simulate_observations_with_trivial_model(self):
-        model = trivial_model()
+        model = trivial_model(approximate=True)
         rs = np.random.RandomState(1)
-        model.simulate_observations([1], rs)
+        model.simulate_observations(1, random_state=rs)
 
     def test_can_simulate_sensible_behavior_with_trivial_model(self):
-        model = trivial_model(2000)
+        model = trivial_model(approximate=True, training_episodes=2000)
         rs = np.random.RandomState(1)
-        obs = model.simulate_observations([-0.1], rs)
-        for o in obs:
-            assert o.path_len < 3
+        obs = model.simulate_observations(-0.1, random_state=rs)
+        sum_obs = model.summary_function(obs)[0]
+        for so in sum_obs.data:
+            assert so.path_len < 3
 
     def test_can_generate_all_probable_paths_for_observation(self):
-        model = trivial_model()
+        model = trivial_model(approximate=False)
         for init_state in [State(0,0), State(2,2)]:
             obs = Observation(start_state=init_state, path_len=2)
             paths = model.get_all_paths_for_obs(obs)
@@ -140,25 +156,42 @@ class TestGridWorldModel():
                 i += 1
             assert i == 4 * 4 * 2  # 4 actions * 4 actions * 2 possible trajectories
 
+    def test_discrepancy_can_be_computed(self):
+        rs = np.random.RandomState(1)
+        obs = list()
+        models = list()
+        model = trivial_model(approximate=True)
+        loc = [0.0]
+        sim = model.summary_function(model.simulate_observations(*loc, random_state=rs))[0]
+        model.discrepancy(([sim],), ([sim],))
+
+    def test_loglikelihood_can_be_computed(self):
+        rs = np.random.RandomState(1)
+        obs = list()
+        models = list()
+        model = trivial_model(approximate=False)
+        loc = [0.0]
+        sim = model.summary_function(model.simulate_observations(*loc, random_state=rs))[0]
+        model.discrepancy(([DummyValue(loc, rs)],), ([sim],))
+
     @slow  # ~5min
     def test_discrepancy_results_are_sensible(self):
         rs = np.random.RandomState(1)
         obs = list()
-        models = list()
         loc = [[-1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0]]
+        model = simple_model(approximate=True, training_episodes=100000,
+                             simulation_episodes=1000, prob_rnd_move=0.05, use_test_grid=True)
         for l in loc:
-            model = simple_model(100000, 1000, prob_rnd_move=0.05, use_test_grid=True)
-            obs.append(model.simulate_observations(l, rs))
-            models.append(model)  # use separate models to avoid recomputing the policy
-        d00 = models[0].evaluate_discrepancy(loc[0], obs[0], rs)
-        d01 = models[0].evaluate_discrepancy(loc[0], obs[1], rs)
-        d02 = models[0].evaluate_discrepancy(loc[0], obs[2], rs)
-        d10 = models[1].evaluate_discrepancy(loc[1], obs[0], rs)
-        d11 = models[1].evaluate_discrepancy(loc[1], obs[1], rs)
-        d12 = models[1].evaluate_discrepancy(loc[1], obs[2], rs)
-        d20 = models[2].evaluate_discrepancy(loc[2], obs[0], rs)
-        d21 = models[2].evaluate_discrepancy(loc[2], obs[1], rs)
-        d22 = models[2].evaluate_discrepancy(loc[2], obs[2], rs)
+            obs.append(model.summary_function(model.simulate_observations(*l, random_state=rs))[0])
+        d00 = model.discrepancy(([obs[0]],), ([obs[0]],))
+        d01 = model.discrepancy(([obs[0]],), ([obs[1]],))
+        d02 = model.discrepancy(([obs[0]],), ([obs[2]],))
+        d10 = model.discrepancy(([obs[1]],), ([obs[0]],))
+        d11 = model.discrepancy(([obs[1]],), ([obs[1]],))
+        d12 = model.discrepancy(([obs[1]],), ([obs[2]],))
+        d20 = model.discrepancy(([obs[2]],), ([obs[0]],))
+        d21 = model.discrepancy(([obs[2]],), ([obs[1]],))
+        d22 = model.discrepancy(([obs[2]],), ([obs[2]],))
         assert d00 < d01
         assert d00 < d02
         assert d11 < d10
@@ -172,36 +205,38 @@ class TestGridWorldModel():
         obs = list()
         models = list()
         loc = [[-1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0]]
+        model = simple_model(approximate=False, training_episodes=100000,
+                             simulation_episodes=100000, prob_rnd_move=0.05, use_test_grid=True)
         for l in loc:
-            model = simple_model(100000, 100000, prob_rnd_move=0.1, use_test_grid=True)
-            sim = model.simulate_observations(l, rs)
+            sim = model.summary_function(model.simulate_observations(*l, random_state=rs))[0]
             n_obs = 100
-            filt_sim = [s for s in sim if s.path_len < 6][:n_obs]  # to reduce computation time
+            filt_sim = [s for s in sim.data if s.path_len < 6][:n_obs]  # to reduce computation time
             assert len(filt_sim) == n_obs
-            obs.append(filt_sim)
-            models.append(model)  # use separate models to avoid recomputing the policy
-        ll00 = models[0].evaluate_loglikelihood(loc[0], obs[0], rs)
-        ll01 = models[0].evaluate_loglikelihood(loc[0], obs[1], rs)
-        ll02 = models[0].evaluate_loglikelihood(loc[0], obs[2], rs)
-        ll10 = models[1].evaluate_loglikelihood(loc[1], obs[0], rs)
-        ll11 = models[1].evaluate_loglikelihood(loc[1], obs[1], rs)
-        ll12 = models[1].evaluate_loglikelihood(loc[1], obs[2], rs)
-        ll20 = models[2].evaluate_loglikelihood(loc[2], obs[0], rs)
-        ll21 = models[2].evaluate_loglikelihood(loc[2], obs[1], rs)
-        ll22 = models[2].evaluate_loglikelihood(loc[2], obs[2], rs)
-        assert ll00 > ll01
-        assert ll00 > ll02
-        assert ll11 > ll10
-        assert ll11 > ll12
-        assert ll22 > ll20
-        assert ll22 > ll21
+            sim.data = filt_sim
+            obs.append(sim)
+        d00 = model.discrepancy(([DummyValue(loc[0], rs)],), ([obs[0]],))
+        d01 = model.discrepancy(([DummyValue(loc[0], rs)],), ([obs[1]],))
+        d02 = model.discrepancy(([DummyValue(loc[0], rs)],), ([obs[2]],))
+        d10 = model.discrepancy(([DummyValue(loc[1], rs)],), ([obs[0]],))
+        d11 = model.discrepancy(([DummyValue(loc[1], rs)],), ([obs[1]],))
+        d12 = model.discrepancy(([DummyValue(loc[1], rs)],), ([obs[2]],))
+        d20 = model.discrepancy(([DummyValue(loc[2], rs)],), ([obs[0]],))
+        d21 = model.discrepancy(([DummyValue(loc[2], rs)],), ([obs[1]],))
+        d22 = model.discrepancy(([DummyValue(loc[2], rs)],), ([obs[2]],))
+        assert d00 < d01
+        assert d00 < d02
+        assert d11 < d10
+        assert d11 < d12
+        assert d22 < d20
+        assert d22 < d21
 
     @slow  # ~1min
     def test_policy_returns_correct_probabilities(self):
-        model = simple_model(training_episodes=100000, prob_rnd_move=0, use_test_grid=True)
+        model = simple_model(approximate=False, training_episodes=100000,
+                             prob_rnd_move=0, use_test_grid=True)
         loc = [-1, 0, 0, 0]
         rs = np.random.RandomState(1)
-        model.simulate_observations(loc, rs)
+        model.simulate_observations(*loc, random_state=rs)
         policy = model._get_optimal_policy(loc, None)
         # policy:
         # >>v<<
@@ -234,33 +269,33 @@ class TestGridWorldModel():
     def test_loglikelihood_results_are_accurate(self):
         rs = np.random.RandomState(1)
         obs = list()
-        models = list()
         loc = [[-1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0]]
         sel_obs = list()
+        model = simple_model(approximate=False, training_episodes=100000,
+                             simulation_episodes=2000000, prob_rnd_move=0.05, use_test_grid=True)
         for l in loc:
-            model = simple_model(20000, 2000000, prob_rnd_move=0.1, use_test_grid=True)
-            obs.append(model.simulate_observations(l, rs))
-            models.append(model)  # use separate models to avoid recomputing the policy
-        common_obs = list(set(obs[0]).intersection(set(obs[1])).intersection(set(obs[2])))
+            sim = model.summary_function(model.simulate_observations(*l, random_state=rs))[0]
+            obs.append(sim)
+        common_obs = ObservationDataset(list(set(obs[0].data).intersection(set(obs[1].data)).intersection(set(obs[2].data))))
         for i in range(5):
             while True:
-                so = rs.choice(common_obs)
+                so = rs.choice(common_obs.data)
                 if so.path_len < 6:
                     ep0 = float(sum([so == o for o in obs[0]]))
                     ep1 = float(sum([so == o for o in obs[1]]))
                     ep2 = float(sum([so == o for o in obs[2]]))
                     if ep0 > 500 and ep1 > 500 and ep2 > 500:
                         break
-                common_obs.remove(so)
-                assert len(common_obs) > 0
+                common_obs.data.remove(so)
+                assert len(common_obs.data) > 0
             print("{} counts: {}, {}, {}".format(so, ep0, ep1, ep2))
             ep01 = ep0 / ep1
             ep02 = ep0 / ep2
             ep12 = ep1 / ep2
             print("empirical: {}, {}, {}".format(ep01, ep02, ep12))
-            ll0 = models[0].evaluate_loglikelihood(loc[0], [so], rs)
-            ll1 = models[1].evaluate_loglikelihood(loc[1], [so], rs)
-            ll2 = models[2].evaluate_loglikelihood(loc[2], [so], rs)
+            ll0 = model.evaluate_loglikelihood(loc[0], [so], rs)
+            ll1 = model.evaluate_loglikelihood(loc[1], [so], rs)
+            ll2 = model.evaluate_loglikelihood(loc[2], [so], rs)
             p01 = np.exp(ll0 - ll1)
             p02 = np.exp(ll0 - ll2)
             p12 = np.exp(ll1 - ll2)

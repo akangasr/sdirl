@@ -61,9 +61,9 @@ def create_simple_inference_task():
     return itask
 
 def create_simple_modelbase_object():
-    prior = ParameterPrior("uniform", (1, 1))
     bounds = (1, 2)
-    param = ModelParameter("param name", prior, bounds)
+    prior = ParameterPrior("uniform", (1, 1))
+    param = ModelParameter("param name", bounds, prior)
     summary = ObservationSummary("summary name", dummy_summary)
     model = ModelBase("model name", [param], dummy_simulator, [summary], dummy_discrepancy)
     model.ground_truth = [1.0]

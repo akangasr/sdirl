@@ -1,7 +1,8 @@
 
 import numpy as np
 
-from sdirl.model import RLModel, ELFIModel
+from sdirl.environment import Environment
+from sdirl.model import *
 from sdirl.rl.simulator import RLSimulator
 from sdirl.gridworld.mdp import *
 
@@ -52,12 +53,14 @@ class GridWorldFactory(SDIRLModelFactory):
             n_simulation_episodes=100,
             max_sim_episode_len=10000,
             initial_state="edge",
-            grid_type="walls"):
+            grid_type="walls",
+            observation=None,
+            ground_truth=None):
 
         initial_state = initial_state
-        if self.initial_state == "edge":
+        if initial_state == "edge":
             initial_state_generator = InitialStateUniformlyAtEdge(grid_size)
-        elif self.initial_state == "anywhere":
+        elif initial_state == "anywhere":
             initial_state_generator = InitialStateUniformlyAnywhere(grid_size)
         else:
             raise ValueError("Unknown initial state type: {}".format(initial_state))
@@ -87,10 +90,10 @@ class GridWorldFactory(SDIRLModelFactory):
                     n_training_episodes=n_training_episodes,
                     n_episodes_per_epoch=n_episodes_per_epoch,
                     n_simulation_episodes=n_simulation_episodes,
-                    var_names=parameters,
+                    parameters=parameters,
                     env=env,
                     task=task)
-        super(GridWorld, self).__init__(name="GridWorld",
+        super(GridWorldFactory, self).__init__(name="GridWorld",
                  parameters=parameters,
                  env=env,
                  task=task,
@@ -104,6 +107,10 @@ class GridWorldFactory(SDIRLModelFactory):
     def get_new_instance(self, approximate):
         inst = super(GridWorldFactory, self).get_new_instance(approximate)
         inst.max_sim_episode_len = self.max_sim_episode_len
+        if approximate is False and inst.observation is None and inst.ground_truth is not None:
+            # we use a dummy simulator so this hack is needed
+            random_state = Environment.get_instance().random_state
+            inst.observation = inst.simulate_observations(*inst.ground_truth, random_state=random_state)[0]
         return inst
 
 
@@ -113,15 +120,8 @@ class GridWorld(SDIRLModel):
     Built using GridWorldFactory
     """
     def __init__(self):
-        super(GridWorldModel, self).__init__()
+        super(GridWorld, self).__init__()
         self.max_sim_episode_len = None
-
-        # TODO: move elsewhere
-        #self.kernel_var = 1.0
-        #self.kernel_scale = 0.5
-        #self.noise_var = 1.0
-        #self.optimizer = "scg"
-        #self.max_opt_iters = 10
 
     def _filt_obs(self, observations):
         filt_obs = [obs for obs in observations if obs.path_len <= self.max_sim_episode_len]
@@ -131,9 +131,9 @@ class GridWorld(SDIRLModel):
         return filt_obs
 
     def summary_function(self, observations):
-        obs = [Observation(ses["path"]) for ses in observations[0]["sessions"]]
+        obs = [Observation(ses["path"]) for ses in observations[0].data["sessions"]]
         fobs = self._filt_obs(obs)
-        return np.atleast_1d(fobs)
+        return np.atleast_1d(ObservationDataset(fobs, name="summary"))
 
     def _prob_obs(self, obs, path):
         """ Returns the probability that 'path' would generate 'obs'.
@@ -184,16 +184,16 @@ class GridWorld(SDIRLModel):
                 self._paths[obs] = tuple()
 
     def calculate_discrepancy(self, observations, sim_observations):
-        features = [self._avg_path_len_by_start(i, observations[0][0]) for i in range(self.env.initial_state_generator.n_initial_states)]
-        features_sim = [self._avg_path_len_by_start(i, sim_observations[0][0]) for i in range(self.env.initial_state_generator.n_initial_states)]
+        features = [self._avg_path_len_by_start(i, observations[0][0].data) for i in range(self.env.initial_state_generator.n_initial_states)]
+        features_sim = [self._avg_path_len_by_start(i, sim_observations[0][0].data) for i in range(self.env.initial_state_generator.n_initial_states)]
         disc = 0.0
         for f, fs in zip(features, features_sim):
             disc += np.abs(f - fs)
         disc /= len(features)  # scaling
-        return np.atleast_1d[disc]
+        return np.atleast_1d([disc])
 
     def _avg_path_len_by_start(self, start_id, obs):
-        state = self.initial_state_generator.get_initial_state(start_id)
+        state = self.env.initial_state_generator.get_initial_state(start_id)
         vals = []
         for o in obs:
             if o.start_state == state:

@@ -1,79 +1,106 @@
 import os
 import sys
-import time
 
 import matplotlib
 matplotlib.use('Agg')
 
-from sdirl.inference_tasks import *
-from sdirl.gridworldmodel.model import GridWorldModel
+from sdirl.experiments import *
+from sdirl.model import *
+from sdirl.gridworld.model import GridWorldFactory
+from sdirl.elfi_utils import BolfiParams
 
 import logging
 logger = logging.getLogger(__name__)
 
+def get_model(parameters, ground_truth, world_seed, approximate):
+    gwf = GridWorldFactory(parameters,
+            grid_size=5,
+            step_penalty=0.05,
+            prob_rnd_move=0.05,
+            world_seed=world_seed,
+            n_training_episodes=100000,
+            n_episodes_per_epoch=100,
+            n_simulation_episodes=100,
+            max_sim_episode_len=8,
+            ground_truth=ground_truth,
+            initial_state="edge",
+            grid_type="walls")
+    return gwf.get_new_instance(approximate)
+
+def get_bolfi_params(parameters):
+    params = BolfiParams()
+    params.bounds = tuple([p.bounds for p in parameters])
+    params.sync = False
+    params.kernel_class = GPy.kern.RBF
+    params.gp_params_optimizer = "scg"
+    params.gp_params_max_opt_iters = 10
+    params.exploration_rate = 1.0
+    params.acq_opt_iterations = 1000
+    params.batches_of_init_samples = 1
+    params.inference_type = InferenceType.ML
+    params.use_store = True
+    return params
+
+def run_ground_truth_inference_experiment(parameters, bolfi_params, ground_truth, model, approximate):
+    file_dir_path = os.path.dirname(os.path.realpath(__file__))
+    results_file = os.path.join(file_dir_path, "results_approx_{}.pdf".format(approximate))
+
+    experiment = GroundTruthInferenceExperiment(model,
+            bolfi_params,
+            ground_truth,
+            plot_params = PlotParams(pdf_file=results_file))
+    experiment.run()
+
+    experiment_file = os.path.join(file_dir_path, "experiment_approx_{}.json".format(approximate))
+    write_json_file(experiment_file, experiment.to_dict())
+
+
 if __name__ == "__main__":
     env = Environment(sys.argv)
+
     n_features = 2
     #n_features = 3
     #n_features = 4
 
+    parameters = list()
+    n_samples = 0
+    batch = 0
+    for i in range(1, n_features+1):
+        parameters.append(ModelParameter("feature{}_value".format(i), bounds=(-1, 0)))
+        n_samples += 100
+        batch += 10
     if n_features == 4:
-        variable_names = ["feature1_value", "feature2_value", "feature3_value", "feature4_value"]
         ground_truth = [-0.2, -0.4, -0.6, -0.8]
-        n_samples = 400
-        batch = 40
     if n_features == 3:
-        variable_names = ["feature1_value", "feature2_value", "feature3_value"]
         ground_truth = [-0.25, -0.5, -0.75]
-        n_samples = 300
-        batch = 30
     if n_features == 2:
-        variable_names = ["feature1_value", "feature2_value"]
         ground_truth = [-0.33, -0.67]
-        n_samples = 200
-        batch = 20
 
-    grid_size = 5
-    step_penalty = 0.05
-    prob_rnd_move = 0.05
-    world_seed = env.rs.randint(1e7)
-    n_training_episodes = 1000000
-    n_episodes_per_epoch = 10
-    n_simulation_episodes = 100
-    max_sim_episode_len = 8
-    initial_state = "edge"
-    grid_type = "walls"
-    verbose = True
-    model = GridWorldModel(variable_names,
-        grid_size=grid_size,
-        step_penalty=step_penalty,
-        prob_rnd_move=prob_rnd_move,
-        world_seed=world_seed,
-        n_training_episodes=n_training_episodes,
-        n_episodes_per_epoch=n_episodes_per_epoch,
-        n_simulation_episodes=n_simulation_episodes,
-        max_sim_episode_len=max_sim_episode_len,
-        initial_state=initial_state,
-        grid_type=grid_type,
-        verbose=verbose)
+    world_seed = env.random_state.randint(1e7)
 
-    bolfi_params = BolfiParams(
-            n_surrogate_samples = n_samples,
-            batch_size = batch,
-            sync = False,
-            exploration_rate = 1.0,
-            opt_iterations = 1000,
-            rbf_scale = 0.05,
-            rbf_amplitude = 1.0)
+    obs = None
 
-    exp = BOLFI_ML_ComparisonExperiment(env,
-            model,
-            ground_truth,
-            bolfi_params)
-    exp.run()
+    for approximate in [True, False]:
+        model = get_model(parameters, ground_truth, world_seed, approximate)
+        if obs is None:
+            # use same observation for both inferences
+            obs = model.simulator(*ground_truth, random_state=env.random_state)[0]
+        model.observation = obs
+        bolfi_params = get_bolfi_params(parameters)
+        bolfi_params.n_surrogate_samples = n_samples
+        bolfi_params.batch_size = batch
+        bolfi_params.client = env.client
+        if approximate is True:
+            bolfi_params.noise_var = 1.0
+            bolfi_params.kernel_var = 1.0
+            bolfi_params.kernel_scale = 1.0
+            bolfi_params.rbf_scale = 0.05
+            bolfi_params.rbf_amplitude = 1.0
+        else:
+            bolfi_params.noise_var = 0.1
+            bolfi_params.kernel_var = 1.0
+            bolfi_params.kernel_scale = 10.0
+            bolfi_params.rbf_scale = 0.05
+            bolfi_params.rbf_amplitude = 10.0
 
-    file_dir_path = os.path.dirname(os.path.realpath(__file__))
-    exp_file = os.path.join(file_dir_path, "experiment.json")
-    write_json_file(exp_file, exp.to_dict())
-    pdf_file = os.path.join(file_dir_path, "results.pdf")
-    write_report_file(pdf_file, exp)
+        run_ground_truth_inference_experiment(parameters, bolfi_params, ground_truth, model, approximate)

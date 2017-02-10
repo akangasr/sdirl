@@ -26,11 +26,19 @@ class TestParameterPrior():
         j = json.dumps(d)
 
 class TestModelParameter():
+    def test_default_prior_is_uniform(self):
+        name = "param1"
+        bounds = (-1, 1)
+        p = ModelParameter(name, bounds)
+        assert p.prior is not None
+        assert p.prior.distribution_name == "uniform"
+        assert p.prior.params == (-1, 2)
+
     def test_can_be_serialized(self):
         name = "param1"
-        prior = ParameterPrior()
         bounds = (0, 1)
-        p = ModelParameter(name, prior, bounds)
+        prior = ParameterPrior()
+        p = ModelParameter(name, bounds, prior)
         d = p.to_dict()
         assert d["name"] == name
         assert str(d["prior"]) == str(prior.to_dict())
@@ -79,7 +87,7 @@ class TestModelBase():
     def test_can_be_serialized(self):
         name = "model"
         prior = ParameterPrior()
-        param = ModelParameter("param1", prior, (0,1))
+        param = ModelParameter("param1", (0,1), prior)
         parameters = [param]
         simulator = dummy_function
         summary = ObservationSummary("sum1", dummy_function)
@@ -103,14 +111,14 @@ class TestSDIRLModel():
     def test_can_be_serialized(self):
         name = "model"
         prior = ParameterPrior()
-        param = ModelParameter("param1", prior, (0,1))
+        param = ModelParameter("param1", (0,1), prior)
         parameters = [param]
         observation = ObservationDataset(2)
         ground_truth = [1]
         env = DummyToDictable({"env": 1})
         task = DummyToDictable({"task": 1})
         rl = DummyToDictable({"rl": 1})
-        goal_state = DummyToDictable({"state": 1})
+        goal_state = 1
         path_max_len = 3
         f = SDIRLModelFactory(name, parameters, env,
                  task, rl, goal_state, path_max_len,
@@ -127,7 +135,7 @@ class TestSDIRLModel():
         assert d1["env"] == env.contents
         assert d1["task"] == task.contents
         assert d1["rl"] == rl.contents
-        assert d1["goal_state"] == goal_state.contents
+        assert d1["goal_state"] == "1"
         assert d1["path_max_len"] == 3
         j1 = json.dumps(d1)
         m2 = f.get_new_instance(approximate=False)
@@ -142,7 +150,7 @@ class TestSDIRLModel():
         assert d2["env"] == env.contents
         assert d2["task"] == task.contents
         assert d2["rl"] == rl.contents
-        assert d2["goal_state"] == goal_state.contents
+        assert d2["goal_state"] == "1"
         assert d2["path_max_len"] == 3
         j2 = json.dumps(d2)
 

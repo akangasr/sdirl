@@ -58,11 +58,13 @@ class ModelParameter():
     """
     def __init__(self,
                  name = "parameter",
-                 prior = ParameterPrior(),
-                 bounds = (0, 1)):
+                 bounds = (0, 1),
+                 prior = None):
         self.name = name
-        self.prior = prior
         self.bounds = bounds
+        self.prior = prior
+        if self.prior is None:
+            self.prior = ParameterPrior("uniform", (bounds[0], bounds[1]-bounds[0]))
 
     def to_dict(self):
         """ Returns a json-serializable dict
@@ -206,7 +208,7 @@ class SDIRLModel(ModelBase):
         self.goal_state = None
         self.path_max_len = None
         self._paths = None
-        self._prev_variables = []
+        self._prev_parameters = []
         self._precomp_obs_logprobs = dict()
 
     def to_dict(self):
@@ -214,14 +216,14 @@ class SDIRLModel(ModelBase):
         ret["env"] = self.env.to_dict()
         ret["task"] = self.task.to_dict()
         ret["rl"] = self.rl.to_dict()
-        ret["goal_state"] = self.goal_state.to_dict()
+        ret["goal_state"] = str(self.goal_state)
         ret["path_max_len"] = self.path_max_len
         return ret
 
 
     # Exact inference using logl
     def dummy_simulator(self, *parameters, random_state=None):
-        return np.atleast_1d(NullValue(parameters, random_state))
+        return np.atleast_1d(DummyValue(parameters, random_state))
 
     def passthrough_summary_function(self, data):
         if isinstance(data[0], DummyValue):
@@ -229,11 +231,11 @@ class SDIRLModel(ModelBase):
         else:
             return self.summary_function(data)
 
-    def logl_discrepancy(sim_data, obs_data):
+    def logl_discrepancy(self, sim_data, obs_data):
         parameters = sim_data[0][0].parameters
         random_state = sim_data[0][0].random_state
-        observations = obs_data[0]
-        return -1 * self.evaluate_loglikelihood(parameters, observations, random_state)
+        observations = obs_data[0][0].data
+        return np.atleast_1d([-1 * self.evaluate_loglikelihood(parameters, observations, random_state)])
 
     def evaluate_loglikelihood(self, parameters, observations, random_state):
         assert len(observations) > 0
@@ -308,13 +310,13 @@ class SDIRLModel(ModelBase):
         """
         logp = 0
         if len(path) < self.path_max_len:
-            assert path.transitions[-1].next_state == self.target_state  # should have been be pruned
+            assert path.transitions[-1].next_state == self.goal_state  # should have been be pruned
         # assume all start states equally probable
         for transition in path.transitions:
             state = transition.prev_state
             action = transition.action
             next_state = transition.next_state
-            assert state != self.target_state  # should have been pruned
+            assert state != self.goal_state  # should have been pruned
             act_i_prob = policy(state, action)
             if act_i_prob == 0:
                 return 0.0
@@ -324,11 +326,11 @@ class SDIRLModel(ModelBase):
             logp += np.log(act_i_prob) + np.log(tra_i_prob)
         return np.exp(logp)
 
-    def _get_optimal_policy(self, variables, random_state):
+    def _get_optimal_policy(self, parameters, random_state):
         """ Returns a function pointer f(state, action) -> p(action|state) that defines the
             optimal policy.
         """
-        self._train_model_if_needed(variables, random_state)
+        self._train_model_if_needed(parameters, random_state)
         return self.rl.get_policy()
 
 
@@ -341,7 +343,7 @@ class SDIRLModel(ModelBase):
     def summary_function(self, data):
         raise NotImplementedError
 
-    def calculate_discrepancy(sim_data, obs_data):
+    def calculate_discrepancy(self, sim_data, obs_data):
         raise NotImplementedError
 
 
@@ -351,12 +353,12 @@ class SDIRLModel(ModelBase):
         """
         pass
 
-    def _train_model_if_needed(self, variables, random_state):
-        """ Trains the model if variables have changed
+    def _train_model_if_needed(self, parameters, random_state):
+        """ Trains the model if parameters have changed
         """
-        if not np.array_equal(self._prev_variables, variables):
-            self.rl.train_model(*variables, random_state=random_state)
-            self._prev_variables = variables
+        if not np.array_equal(self._prev_parameters, parameters):
+            self.rl.train_model(parameters, random_state=random_state)
+            self._prev_parameters = parameters
             self._precomp_obs_logprobs = dict()
             self.print_model()
 
@@ -370,8 +372,8 @@ class SDIRLModelFactory():
                  env,
                  task,
                  rl,
-                 goal_state,
-                 path_max_len,
+                 goal_state=None,
+                 path_max_len=None,
                  klass=SDIRLModel,
                  observation=None,
                  ground_truth=None):
@@ -391,10 +393,6 @@ class SDIRLModelFactory():
             raise ValueError("Task should implement to_dict()")
         if getattr(self.rl, "to_dict", None) is None:
             raise ValueError("RL should implement to_dict()")
-        if getattr(self.goal_state, "to_dict", None) is None:
-            raise ValueError("Goal state should implement to_dict()")
-        if self.ground_truth is None and self.observation is None:
-            raise ValueError("Should provide either ground truth or observation")
 
     def get_new_instance(self, approximate):
         model = self.klass()

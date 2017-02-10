@@ -6,13 +6,18 @@ slow = pytest.mark.skipif(
 from collections import defaultdict
 import numpy as np
 
+from sdirl.model import ModelParameter
 from sdirl.menumodel.model import *
 from sdirl.menumodel.mdp import *
 from sdirl.rl.utils import Path, Transition
 
-def simple_model(variables=["focus_duration_100ms"], values=[4.0]):
-    model = MenuSearchModel(
-                 variables,
+def simple_model(parameters=None, values=None):
+    if parameters is None:
+        parameters = [ModelParameter("focus_duration_100ms", bounds=(1,6))]
+    if values is None:
+        values = {"focus_duration": 4.0}
+    msf = MenuSearchFactory(
+                 parameters,
                  menu_type="semantic",
                  menu_groups=2,
                  menu_items_per_group=4,
@@ -23,10 +28,11 @@ def simple_model(variables=["focus_duration_100ms"], values=[4.0]):
                  n_training_menus=10000,
                  n_training_episodes=100000,
                  n_episodes_per_epoch=20,
-                 n_simulation_episodes=100,
-                 verbose=True)
+                 n_simulation_episodes=100)
+    model = msf.get_new_instance(approximate=True)
     model.env.setup(values, np.random.RandomState(0))
     return model
+
 
 class TestSearchMDP():
 
@@ -126,36 +132,36 @@ class TestSearchMDP():
 
 class TestMenuSearchModel():
 
-    @slow  # ~5min
-    def test_can_simulate_sensible_behavior_with_simple_model(self):
-        model = simple_model()
-        rs = np.random.RandomState(1)
-        obs = model.simulate_observations([4.0], rs)
-        for o in obs:
-            assert o.task_completion_time < 8000
-
-    @slow  # ~10min
-    def test_discrepancy_results_are_sensible(self):
+    def test_discrepancy_can_be_computed(self):
         rs = np.random.RandomState(1)
         obs = list()
         models = list()
+        model = simple_model()
+        loc = [4.0]
+        sim = model.summary_function(model.simulate_observations(*loc, random_state=rs))[0]
+        model.discrepancy(([sim],), ([sim],))
+
+    @slow  # ~5min
+    def test_discrepancy_results_are_sensible(self):
+        rs = np.random.RandomState(1)
+        obs = list()
         loc = [[1.0], [3.0], [5.0]]
+        model = simple_model()
         for l in loc:
-            model = simple_model()
-            obs.append(model.simulate_observations(l, rs))
-            models.append(model)  # use separate models to avoid recomputing the policy
-        d00 = models[0].evaluate_discrepancy(loc[0], obs[0], rs)
-        d01 = models[0].evaluate_discrepancy(loc[0], obs[1], rs)
-        d02 = models[0].evaluate_discrepancy(loc[0], obs[2], rs)
-        d10 = models[1].evaluate_discrepancy(loc[1], obs[0], rs)
-        d11 = models[1].evaluate_discrepancy(loc[1], obs[1], rs)
-        d12 = models[1].evaluate_discrepancy(loc[1], obs[2], rs)
-        d20 = models[2].evaluate_discrepancy(loc[2], obs[0], rs)
-        d21 = models[2].evaluate_discrepancy(loc[2], obs[1], rs)
-        d22 = models[2].evaluate_discrepancy(loc[2], obs[2], rs)
+            obs.append(model.summary_function(model.simulate_observations(*l, random_state=rs))[0])
+        d00 = model.discrepancy(([obs[0]],), ([obs[0]],))
+        d01 = model.discrepancy(([obs[0]],), ([obs[1]],))
+        d02 = model.discrepancy(([obs[0]],), ([obs[2]],))
+        d10 = model.discrepancy(([obs[1]],), ([obs[0]],))
+        d11 = model.discrepancy(([obs[1]],), ([obs[1]],))
+        d12 = model.discrepancy(([obs[1]],), ([obs[2]],))
+        d20 = model.discrepancy(([obs[2]],), ([obs[0]],))
+        d21 = model.discrepancy(([obs[2]],), ([obs[1]],))
+        d22 = model.discrepancy(([obs[2]],), ([obs[2]],))
         assert d00 < d01
         assert d00 < d02
         assert d11 < d10
         assert d11 < d12
         assert d22 < d20
         assert d22 < d21
+

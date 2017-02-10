@@ -53,6 +53,8 @@ class InferenceTaskFactory():
             y = self.model.observation
         elif self.model.ground_truth is not None:
             y = self.model.simulator(*self.model.ground_truth, random_state=random_state)
+        else:
+            raise ValueError("Model should have observation or ground truth")
         Y = elfi.Simulator(self.model.name,
                            vectorize(self.model.simulator),
                            *parameters,
@@ -77,10 +79,26 @@ class SerializableBolfiPosterior(BolfiPosterior):  # TODO: add this to elfi?
     """
 
     @staticmethod
-    def from_model(model):
+    def from_store(store):
+        """ Constructs SerializableBolfiPosteriors from bolfi store, returns as a list
+        """
+        ret = list()
+        idx = 0
+        while True:
+            model = store.get("BOLFI-model", idx)[0]
+            if model is None:
+                return ret
+            opt_iters = 10000
+            if idx < 10:
+                opt_iters = 100
+            ret.append(SerializableBolfiPosterior.from_model(model, opt_iters))
+            idx += 1
+
+    @staticmethod
+    def from_model(model, opt_iters=10000):
         """ Constructs a SerializableBolfiPosterior from a compatible gp model
         """
-        return SerializableBolfiPosterior(model, None)
+        return SerializableBolfiPosterior(model, None, max_opt_iters=opt_iters)
 
     def to_dict(self):
         # hacky
@@ -186,6 +204,28 @@ class BolfiParams():  # TODO: add this to elfi?
                              self.n_surrogate_samples)
         n_acq_samples = self.n_surrogate_samples - n_init_samples
         return n_init_samples, n_acq_samples
+
+    def to_dict(self):
+        return {
+            "bounds": self.bounds,
+            "n_surrogate_samples": self.n_surrogate_samples,
+            "batch_size": self.batch_size,
+            "sync": self.sync,
+            "kernel_class": self.kernel_class.__name__,
+            "noise_var": self.noise_var,
+            "kernel_var": self.kernel_var,
+            "kernel_scale": self.kernel_scale,
+            "gp_params_optimizer": self.gp_params_optimizer,
+            "gp_params_max_opt_iters": self.gp_params_max_opt_iters,
+            "exploration_rate": self.exploration_rate,
+            "acq_opt_iterations": self.acq_opt_iterations,
+            "rbf_scale": self.rbf_scale,
+            "rbf_amplitude": self.rbf_amplitude,
+            "batches_of_init_samples": self.batches_of_init_samples,
+            "inference_type": self.inference_type,
+            "client": self.client,
+            "use_store": self.use_store
+            }
 
 
 class BolfiMLAcquisition(SecondDerivativeNoiseMixin, LCBAcquisition):

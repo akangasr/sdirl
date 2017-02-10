@@ -325,7 +325,7 @@ class GridWorldEnvironment(ParametricLoggingEnvironment):
         self.grid_generator = grid_generator
         self.actions = [Action.UP, Action.DOWN, Action.LEFT, Action.RIGHT]
         self.grid = self.grid_generator.generate_grid(self.grid_size, self.n_features, self.goal_state)
-        self.log_session_variables = ["grid", "start_loc_id"]
+        self.log_session_variables = ["start_loc_id"]
 
         # pybrain variables
         self.discreteStates = True
