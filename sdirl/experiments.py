@@ -157,6 +157,7 @@ class ComputeBolfiErrors(ExperimentPhase):
         pl.plot(t, errors)
         pl.xlabel("BO samples")
         pl.ylabel(str(e))
+        pl.ylim(min(errors)-0.1, max(errors)+0.1)
         pl.title("Reduction {} over time".format(e))
         plot_params.pdf.savefig()
         pl.close()
@@ -270,7 +271,7 @@ class OrderError(GroundTruthError):
 
 
 class ProportionError(GroundTruthError):
-    """ Calculates proportion-based error (L2 distance between vectors of parameter proportions)
+    """ Calculates proportion-based error (log10 L2 distance between vectors of parameter proportions)
     """
     def _error(self, est):
         prop_gt = list()
@@ -279,7 +280,7 @@ class ProportionError(GroundTruthError):
             for j in range(i+1, len(self.ground_truth)):
                 prop_gt.append(float(self.ground_truth[i])/float(self.ground_truth[j]))
                 prop.append(float(est[i])/float(est[j]))
-        return np.linalg.norm(np.array(prop_gt) - np.array(prop), ord=2)
+        return np.log10(float(np.linalg.norm(np.array(prop_gt) - np.array(prop), ord=2)))
 
     def __repr__(self):
         return "Proportion error to {}".format(self.ground_truth)

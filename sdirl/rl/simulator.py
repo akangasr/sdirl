@@ -130,6 +130,7 @@ class RLSimulator():
         logger.debug("Fitting user model over {} epochs, each {} episodes, total {} episodes."
                 .format(n_epochs, self.rl_params.n_episodes_per_epoch, n_epochs*self.rl_params.n_episodes_per_epoch))
         for i in range(n_epochs):
+            logger.debug("RL epoch {}".format(i))
             self.experiment.doEpisodes(self.rl_params.n_episodes_per_epoch)
             self.agent.learn()
             self.agent.reset()  # reset buffers

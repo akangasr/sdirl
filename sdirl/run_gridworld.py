@@ -65,9 +65,9 @@ def run_ground_truth_inference_experiment(parameters, bolfi_params, ground_truth
 if __name__ == "__main__":
     env = Environment(sys.argv)
 
-    n_features = 2
+    #n_features = 2
     #n_features = 3
-    #n_features = 4
+    n_features = 4
 
     parameters = list()
     n_samples = 0
@@ -104,10 +104,10 @@ if __name__ == "__main__":
             bolfi_params.rbf_scale = 0.05
             bolfi_params.rbf_amplitude = 1.0
         else:
-            bolfi_params.noise_var = 0.1
+            bolfi_params.noise_var = 1.0
             bolfi_params.kernel_var = 1.0
-            bolfi_params.kernel_scale = 10.0
+            bolfi_params.kernel_scale = 100.0
             bolfi_params.rbf_scale = 0.05
-            bolfi_params.rbf_amplitude = 10.0
+            bolfi_params.rbf_amplitude = 100.0
 
         run_ground_truth_inference_experiment(parameters, bolfi_params, ground_truth, model, approximate)
