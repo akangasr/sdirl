@@ -14,14 +14,14 @@ logger = logging.getLogger(__name__)
 
 def get_model(parameters, ground_truth, grid_size, approximate):
     gwf = GridWorldFactory(parameters,
-            grid_size=5,
+            grid_size=grid_size,
             step_penalty=0.05,
             prob_rnd_move=0.05,
             world_seed=1234,
-            n_training_episodes=10,
+            n_training_episodes=10000,
             n_episodes_per_epoch=100,
             n_simulation_episodes=100,
-            max_sim_episode_len=8,
+            max_sim_episode_len=7,
             ground_truth=ground_truth,
             initial_state="edge",
             grid_type="walls")

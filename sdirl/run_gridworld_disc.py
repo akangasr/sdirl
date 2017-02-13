@@ -77,8 +77,8 @@ if __name__ == "__main__":
     batch = 0
     for i in range(1, n_features+1):
         parameters.append(ModelParameter("feature{}_value".format(i), bounds=(-1, 0)))
-        n_samples += 10
-        batch += 1
+        n_samples += 100
+        batch += 10
     if n_features == 4:
         ground_truth = [-0.2, -0.4, -0.6, -0.8]
     if n_features == 3:

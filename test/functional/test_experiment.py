@@ -3,6 +3,9 @@ slow = pytest.mark.skipif(
     not pytest.config.getoption("--slow"),
     reason="need --slow option to run")
 
+import matplotlib
+matplotlib.use('Agg')
+
 import os
 import GPy
 import numpy as np

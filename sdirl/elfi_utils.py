@@ -223,7 +223,7 @@ class BolfiParams():  # TODO: add this to elfi?
             "rbf_amplitude": self.rbf_amplitude,
             "batches_of_init_samples": self.batches_of_init_samples,
             "inference_type": self.inference_type,
-            "client": self.client,
+            #"client": self.client,  # TODO: serialization of client?
             "use_store": self.use_store
             }
 

@@ -11,8 +11,8 @@ class TestExperimentPhase():
         p2 = Mock(ExperimentPhase)
         ep = ExperimentPhase(parents=[p1, p2])
         ep.run(PlotParams())
-        p1.run.assert_called_once()
-        p2.run.assert_called_once()
+        assert p1.run.call_count == 1
+        assert p2.run.call_count == 1
 
 
 class TestComputeBolfiPosterior():
@@ -26,7 +26,7 @@ class TestComputeBolfiPosterior():
 
     def test_runs_bolfi_inference_when_run(self):
         self.run_phase_with_mock()
-        self.bolfi.infer.assert_called_once()
+        assert self.bolfi.infer.call_count == 1
 
     def test_stores_final_posterior_if_no_store(self):
         self.run_phase_with_mock()
@@ -49,6 +49,6 @@ class TestExperiment():
         e.add_phase(p3)
         e.run()
         p1.run.assert_not_called()
-        p2.run.assert_called_once()
-        p3.run.assert_called_once()
+        assert p2.run.call_count == 1
+        assert p3.run.call_count == 1
 
