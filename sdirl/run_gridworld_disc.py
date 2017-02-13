@@ -8,19 +8,26 @@ from sdirl.experiments import *
 from sdirl.model import *
 from sdirl.gridworld.model import GridWorldFactory
 from sdirl.elfi_utils import BolfiParams
+from sdirl.rl.simulator import RLParams
 
 import logging
 logger = logging.getLogger(__name__)
 
 def get_model(parameters, grid_size, ground_truth, world_seed):
+    rl_params = RLParams(
+                 n_training_episodes=100000,
+                 n_episodes_per_epoch=100,
+                 n_simulation_episodes=1000,
+                 q_alpha=0.1,
+                 q_gamma=0.98,
+                 exp_epsilon=0.1,
+                 exp_decay=1.0)
     gwf = GridWorldFactory(parameters,
             grid_size=grid_size,
             step_penalty=0.05,
             prob_rnd_move=0.05,
             world_seed=world_seed,
-            n_training_episodes=100000,
-            n_episodes_per_epoch=100,
-            n_simulation_episodes=1000,
+            rl_params=rl_params,
             max_sim_episode_len=999,
             ground_truth=ground_truth,
             initial_state="edge",
@@ -50,7 +57,7 @@ def run_ground_truth_inference_experiment(parameters, bolfi_params, ground_truth
     file_dir_path = os.path.dirname(os.path.realpath(__file__))
     results_file = os.path.join(file_dir_path, "results.pdf")
 
-    experiment = GroundTruthInferenceExperiment(model,
+    experiment = InferenceExperiment(model,
             bolfi_params,
             ground_truth,
             plot_params = PlotParams(pdf_file=results_file))

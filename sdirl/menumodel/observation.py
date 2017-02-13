@@ -77,6 +77,7 @@ class BaillyData():
         self.step_data["gaze_location"].append(gaze)
         self.step_data["duration_focus_ms"].append(0)
         self.step_data["duration_saccade_ms"].append(0)
+        self.step_data["action_duration"].append(0)
 
     def _add_look_step(self, gaze, saccade_ms, focus_ms):
         """ Add look step to log
@@ -87,6 +88,7 @@ class BaillyData():
         self.step_data["gaze_location"].append(gaze)
         self.step_data["duration_focus_ms"].append(focus_ms)
         self.step_data["duration_saccade_ms"].append(saccade_ms)
+        self.step_data["action_duration"].append(focus_ms + saccade_ms)
 
     def _get_gaze(self, gazepoint, list_length, nearest=False):
         """ Return the current item user is looking at.
@@ -156,6 +158,8 @@ class BaillyData():
         self.step_data["gaze_location"] = list()
         self.step_data["duration_focus_ms"]   = list()
         self.step_data["duration_saccade_ms"] = list()
+        self.step_data["action_duration"]     = list()
+        self.step_data["target_present"]      = (target != None)
 
         gaze = None
         logger.debug("Episode:")

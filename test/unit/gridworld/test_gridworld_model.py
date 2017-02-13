@@ -23,14 +23,16 @@ class DummyToDictable():
 
 def trivial_model(approximate, training_episodes=100):
     parameters = [ModelParameter("feature1_value", bounds=(-1,0))]
+    rl_params = RLParams(
+                 n_training_episodes=training_episodes,
+                 n_episodes_per_epoch=10,
+                 n_simulation_episodes=100)
     gwf = GridWorldFactory(parameters,
             grid_size=3,
             step_penalty=0.1,
             prob_rnd_move=0.0,
             world_seed=0,
-            n_training_episodes=training_episodes,
-            n_episodes_per_epoch=10,
-            n_simulation_episodes=100,
+            rl_params=rl_params,
             observation=DummyToDictable())
     return gwf.get_new_instance(approximate)
 
@@ -41,14 +43,16 @@ def simple_model(approximate, training_episodes=100, simulation_episodes=100, pr
                   ModelParameter("feature2_value", (-1,0)),
                   ModelParameter("feature3_value", (-1,0)),
                   ModelParameter("feature4_value", (-1,0))]
+    rl_params = RLParams(
+                 n_training_episodes=training_episodes,
+                 n_episodes_per_epoch=10,
+                 n_simulation_episodes=simulation_episodes)
     gwf = GridWorldFactory(parameters,
             grid_size=5,
             step_penalty=0.1,
             prob_rnd_move=prob_rnd_move,
             world_seed=0,
-            n_training_episodes=training_episodes,
-            n_episodes_per_epoch=10,
-            n_simulation_episodes=simulation_episodes)
+            rl_params=rl_params)
     model = gwf.get_new_instance(approximate)
     if use_test_grid is True:
         model.env.grid = get_test_grid()
@@ -281,9 +285,9 @@ class TestGridWorld():
             while True:
                 so = rs.choice(common_obs.data)
                 if so.path_len < 6:
-                    ep0 = float(sum([so == o for o in obs[0]]))
-                    ep1 = float(sum([so == o for o in obs[1]]))
-                    ep2 = float(sum([so == o for o in obs[2]]))
+                    ep0 = float(sum([so == o for o in obs[0].data]))
+                    ep1 = float(sum([so == o for o in obs[1].data]))
+                    ep2 = float(sum([so == o for o in obs[2].data]))
                     if ep0 > 500 and ep1 > 500 and ep2 > 500:
                         break
                 common_obs.data.remove(so)

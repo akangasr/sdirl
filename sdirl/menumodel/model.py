@@ -1,7 +1,8 @@
 import numpy as np
 
 from sdirl.menumodel.mdp import SearchEnvironment, SearchTask
-from sdirl.rl.simulator import RLSimulator
+from sdirl.menumodel.observation import BaillyData
+from sdirl.rl.simulator import RLSimulator, RLParams
 from sdirl.model import SDIRLModel, SDIRLModelFactory, ObservationDataset
 import elfi
 
@@ -46,9 +47,7 @@ class MenuSearchFactory(SDIRLModelFactory):
             p_obs_len_adj=0.89,
             max_number_of_actions_per_session=20,
             n_training_menus=10000,
-            n_training_episodes=20000000,
-            n_episodes_per_epoch=20,
-            n_simulation_episodes=10000,
+            rl_params=RLParams(),
             observation=None,
             ground_truth=None):
 
@@ -67,9 +66,7 @@ class MenuSearchFactory(SDIRLModelFactory):
                     env=env,
                     max_number_of_actions_per_session=max_number_of_actions_per_session)
         rl = RLSimulator(
-                    n_training_episodes=n_training_episodes,
-                    n_episodes_per_epoch=n_episodes_per_epoch,
-                    n_simulation_episodes=n_simulation_episodes,
+                    rl_params=rl_params,
                     parameters=parameters,
                     env=env,
                     task=task)

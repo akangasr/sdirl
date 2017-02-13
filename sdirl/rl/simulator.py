@@ -13,12 +13,39 @@ logger = logging.getLogger(__name__)
 Generic RL simulator.
 """
 
+class RLParams():
+    def __init__(self,
+            n_training_episodes=1,
+            n_episodes_per_epoch=1,
+            n_simulation_episodes=1,
+            q_alpha=0.1,
+            q_gamma=0.98,
+            exp_epsilon=0.1,
+            exp_decay=1.0):
+        self.n_training_episodes = n_training_episodes
+        self.n_episodes_per_epoch = n_episodes_per_epoch
+        self.n_simulation_episodes = n_simulation_episodes
+        self.q_alpha = q_alpha
+        self.q_gamma = q_gamma
+        self.exp_epsilon = exp_epsilon
+        self.exp_decay = exp_decay
+
+    def to_dict(self):
+        return {
+            "n_training_episodes": self.n_training_episodes,
+            "n_episodes_per_epoch": self.n_episodes_per_epoch,
+            "n_simulation_episodes": self.n_simulation_episodes,
+            "q_alpha": self.q_alpha,
+            "q_gamma": self.q_gamma,
+            "exp_epsilon": self.exp_epsilon,
+            "exp_decay": self.exp_decay,
+            }
+
+
 class RLSimulator():
 
     def __init__(self,
-            n_training_episodes,
-            n_episodes_per_epoch,
-            n_simulation_episodes,
+            rl_params,
             parameters,
             env,
             task):
@@ -26,33 +53,20 @@ class RLSimulator():
 
         Parameters
         ----------
-        n_training_episodes : int
-            Number of episodes to train before simulating data
-        n_episodes_per_epochs : int
-            Number of training episodes between offline learning
-        n_simulation_episodes : int
-            Number of episodes to simulate after training
+        rl_params : RLParams
         parameters : list of ModelParameter
         env : Environment model
         task : EpisodecTask instance
-        softq : bool
-            True : uses soft q values for actions
-            False : uses hard q values for actions
         """
-        self.n_training_episodes = n_training_episodes
-        self.n_episodes_per_epoch = n_episodes_per_epoch
-        self.n_simulation_episodes = n_simulation_episodes
+        self.rl_params = rl_params
         self.parameters = parameters
         self.env = env
         self.task = task
-        self.softq = False
         self.agent = None
 
     def to_dict(self):
         return {
-                "n_training_episodes": self.n_training_episodes,
-                "n_episodes_per_epoch": self.n_episodes_per_epoch,
-                "n_simulation_episodes": self.n_simulation_episodes,
+                "rl_params": self.rl_params.to_dict(),
                 "parameters": [p.to_dict() for p in self.parameters],
                 }
 
@@ -102,25 +116,28 @@ class RLSimulator():
         self.task.setup(self.v)
         outdim = self.task.env.outdim
         n_actions = self.task.env.numActions
-        self.agent = RLAgent(outdim, n_actions, random_state, self.softq)
+        self.agent = RLAgent(outdim,
+                n_actions,
+                random_state,
+                rl_params=self.rl_params)
         logger.debug("Model initialized")
 
     def _train_model(self):
         """ Uses reinforcement learning to find the optimal strategy
         """
         self.experiment = EpisodicExperiment(self.task, self.agent)
-        n_epochs = int(self.n_training_episodes / self.n_episodes_per_epoch)
+        n_epochs = int(self.rl_params.n_training_episodes / self.rl_params.n_episodes_per_epoch)
         logger.debug("Fitting user model over {} epochs, each {} episodes, total {} episodes."
-                .format(n_epochs, self.n_episodes_per_epoch, n_epochs*self.n_episodes_per_epoch))
+                .format(n_epochs, self.rl_params.n_episodes_per_epoch, n_epochs*self.rl_params.n_episodes_per_epoch))
         for i in range(n_epochs):
-            self.experiment.doEpisodes(self.n_episodes_per_epoch)
+            self.experiment.doEpisodes(self.rl_params.n_episodes_per_epoch)
             self.agent.learn()
             self.agent.reset()  # reset buffers
 
     def simulate(self, random_state):
         """ Simulates agent behavior in 'n_sim' episodes.
         """
-        logger.debug("Simulating user actions ({} episodes)".format(self.n_simulation_episodes))
+        logger.debug("Simulating user actions ({} episodes)".format(self.rl_params.n_simulation_episodes))
         self.experiment = EpisodicExperiment(self.task, self.agent)
 
         # set training flag off
@@ -135,7 +152,7 @@ class RLSimulator():
         self.task.env.start_logging()
 
         # simulate behavior
-        self.experiment.doEpisodes(self.n_simulation_episodes)
+        self.experiment.doEpisodes(self.rl_params.n_simulation_episodes)
         # store log data
         dataset = self.task.env.log
 
@@ -152,13 +169,13 @@ class RLSimulator():
 
 
 class RLAgent(LearningAgent):
-    def __init__(self, outdim, n_actions, random_state, softq=False):
+    def __init__(self, outdim, n_actions, random_state, rl_params):
         """ RL agent
         """
-        module = SparseActionValueTable(n_actions, random_state, softq=softq)
+        module = SparseActionValueTable(n_actions, random_state)
         module.initialize(0.0)
-        learner = EpisodeQ(alpha=0.1, gamma=0.98)
-        learner.explorer = EGreedyExplorer(random_state, epsilon=0.1, decay=1.0)
+        learner = EpisodeQ(alpha=rl_params.q_alpha, gamma=rl_params.q_gamma)
+        learner.explorer = EGreedyExplorer(random_state, epsilon=rl_params.exp_epsilon, decay=rl_params.exp_decay)
         LearningAgent.__init__(self, module, learner)
 
     def get_policy(self):

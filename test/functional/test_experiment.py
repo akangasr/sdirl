@@ -14,18 +14,25 @@ from sdirl.model import ModelParameter
 from sdirl.elfi_utils import InferenceTaskFactory, InferenceType, BolfiParams, BolfiFactory
 from sdirl.gridworld.model import GridWorldFactory
 from sdirl.menumodel.model import MenuSearchFactory
-from sdirl.experiments import GroundTruthInferenceExperiment, PlotParams, write_json_file
+from sdirl.experiments import InferenceExperiment, PlotParams, write_json_file
+from sdirl.rl.simulator import RLParams
 
 
 def get_simple_gridworld_model(parameters, ground_truth, approximate):
+    rl_params = RLParams(
+                 n_training_episodes=1000,
+                 n_episodes_per_epoch=10,
+                 n_simulation_episodes=1,
+                 q_alpha=0.1,
+                 q_gamma=0.1,
+                 exp_epsilon=0.1,
+                 exp_decay=1.0)
     gwf = GridWorldFactory(parameters,
             grid_size=3,
             step_penalty=0.1,
             prob_rnd_move=0.1,
             world_seed=0,
-            n_training_episodes=1000,
-            n_episodes_per_epoch=10,
-            n_simulation_episodes=1,
+            rl_params = rl_params,
             max_sim_episode_len=8,
             ground_truth=ground_truth,
             initial_state="edge",
@@ -34,6 +41,14 @@ def get_simple_gridworld_model(parameters, ground_truth, approximate):
 
 
 def get_simple_menusearch_model(parameters, ground_truth):
+    rl_params = RLParams(
+                 n_training_episodes=1000,
+                 n_episodes_per_epoch=10,
+                 n_simulation_episodes=1,
+                 q_alpha=0.2,
+                 q_gamma=0.1,
+                 exp_epsilon=0.1,
+                 exp_decay=1.0)
     msf = MenuSearchFactory(
                  parameters,
                  menu_type="semantic",
@@ -44,9 +59,7 @@ def get_simple_menusearch_model(parameters, ground_truth):
                  prop_target_absent=0.1,
                  length_observations=False,
                  n_training_menus=10,
-                 n_training_episodes=1000,
-                 n_episodes_per_epoch=10,
-                 n_simulation_episodes=10,
+                 rl_params=rl_params,
                  ground_truth=ground_truth)
     return msf.get_new_instance(approximate=True)
 
@@ -80,7 +93,7 @@ def run_test_ground_truth_inference_experiment(parameters, ground_truth, model):
     file_dir_path = os.path.dirname(os.path.realpath(__file__))
     results_file = os.path.join(file_dir_path, "results.pdf")
 
-    experiment = GroundTruthInferenceExperiment(model,
+    experiment = InferenceExperiment(model,
             bolfi_parameters,
             ground_truth,
             plot_params = PlotParams(pdf_file=results_file))

@@ -3,7 +3,7 @@ import numpy as np
 
 from sdirl.environment import Environment
 from sdirl.model import *
-from sdirl.rl.simulator import RLSimulator
+from sdirl.rl.simulator import RLSimulator, RLParams
 from sdirl.gridworld.mdp import *
 
 import elfi
@@ -48,9 +48,8 @@ class GridWorldFactory(SDIRLModelFactory):
             step_penalty=0.1,
             prob_rnd_move=0.1,
             world_seed=0,
-            n_training_episodes=1000,
-            n_episodes_per_epoch=10,
-            n_simulation_episodes=100,
+            p_grid_feature=0.4,
+            rl_params=RLParams(),
             max_sim_episode_len=10000,
             initial_state="edge",
             grid_type="walls",
@@ -66,7 +65,7 @@ class GridWorldFactory(SDIRLModelFactory):
             raise ValueError("Unknown initial state type: {}".format(initial_state))
 
         if grid_type == "uniform":
-            grid_generator = UniformGrid(world_seed, p_feature=0.4)
+            grid_generator = UniformGrid(world_seed, p_feature=p_grid_feature)
         elif grid_type == "walls":
             grid_generator = WallsGrid(world_seed, n_walls_per_feature=grid_size)
         else:
@@ -74,7 +73,7 @@ class GridWorldFactory(SDIRLModelFactory):
 
         self.max_sim_episode_len = max_sim_episode_len
         goal_state = State(int(grid_size/2), int(grid_size/2))
-        path_max_len = grid_size*2
+        path_max_len = grid_size*3
         env = GridWorldEnvironment(
                     grid_size=grid_size,
                     prob_rnd_move=prob_rnd_move,
@@ -87,9 +86,7 @@ class GridWorldFactory(SDIRLModelFactory):
                     step_penalty=step_penalty,
                     max_number_of_actions_per_session=path_max_len)
         rl = RLSimulator(
-                    n_training_episodes=n_training_episodes,
-                    n_episodes_per_epoch=n_episodes_per_epoch,
-                    n_simulation_episodes=n_simulation_episodes,
+                    rl_params=rl_params,
                     parameters=parameters,
                     env=env,
                     task=task)

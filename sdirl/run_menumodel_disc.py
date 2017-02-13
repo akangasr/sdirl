@@ -6,13 +6,22 @@ matplotlib.use('Agg')
 
 from sdirl.experiments import *
 from sdirl.model import *
-from sdirl.menumodel.model import MenuSearchFactory
+from sdirl.menumodel.model import MenuSearchFactory, MenuSearch
 from sdirl.elfi_utils import BolfiParams
+from sdirl.rl.simulator import RLParams
 
 import logging
 logger = logging.getLogger(__name__)
 
-def get_model(parameters, ground_truth):
+def get_model(parameters, ground_truth=None, observation=None):
+    rl_params = RLParams(
+                 n_training_episodes=100000,
+                 n_episodes_per_epoch=100,
+                 n_simulation_episodes=10000,
+                 q_alpha=0.2,
+                 q_gamma=0.98,
+                 exp_epsilon=0.1,
+                 exp_decay=1.0)
     msf = MenuSearchFactory(
                  parameters,
                  menu_type="semantic",
@@ -22,12 +31,18 @@ def get_model(parameters, ground_truth):
                  gap_between_items=0.75,
                  prop_target_absent=0.1,
                  length_observations=False,
-                 n_training_menus=50000,
-                 n_training_episodes=1000000,
-                 n_episodes_per_epoch=100,
-                 n_simulation_episodes=10000,
-                 ground_truth=ground_truth)
+                 n_training_menus=5000,
+                 rl_params=rl_params,
+                 ground_truth=ground_truth,
+                 observation=observation)
     return msf.get_new_instance(approximate=True)
+
+def get_dataset():
+    return MenuSearch.get_observation_dataset(menu_type="Semantic",
+                allowed_users=list(),  # empty = all users
+                excluded_users=list(),
+                trials_per_user_present=9999,  # all
+                trials_per_user_absent=9999)  # all
 
 def get_bolfi_params(parameters):
     params = BolfiParams()
@@ -50,30 +65,37 @@ def get_bolfi_params(parameters):
     params.use_store = True
     return params
 
-def run_ground_truth_inference_experiment(parameters, bolfi_params, ground_truth, model):
+def run_inference_experiment(parameters, bolfi_params, model, ground_truth=None):
     file_dir_path = os.path.dirname(os.path.realpath(__file__))
     results_file = os.path.join(file_dir_path, "results.pdf")
 
-    experiment = GroundTruthInferenceExperiment(model,
+    if ground_truth is not None:
+        error_classes=[L2Error]
+    else:
+        error_classes=[DiscrepancyError]
+    experiment = InferenceExperiment(model,
             bolfi_params,
             ground_truth,
             plot_params = PlotParams(pdf_file=results_file),
-            error_classes=[L2Error])
+            error_classes=error_classes)
     experiment.run()
 
     experiment_file = os.path.join(file_dir_path, "experiment.json")
     write_json_file(experiment_file, experiment.to_dict())
 
-
 if __name__ == "__main__":
     env = Environment(sys.argv)
 
     parameters = [ModelParameter("focus_duration_100ms", bounds=(1,6))]
-    ground_truth = [4.0]
+    ground_truth = None
 
-    model = get_model(parameters, ground_truth)
     bolfi_params = get_bolfi_params(parameters)
     bolfi_params.client = env.client
 
-    run_ground_truth_inference_experiment(parameters, bolfi_params, ground_truth, model)
+    #ground_truth = [4.0]
+    #model = get_model(parameters, ground_truth=ground_truth)
 
+    observation = get_dataset()
+    model = get_model(parameters, observation=observation)
+
+    run_inference_experiment(parameters, bolfi_params, model, ground_truth)

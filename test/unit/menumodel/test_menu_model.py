@@ -9,6 +9,7 @@ import numpy as np
 from sdirl.model import ModelParameter
 from sdirl.menumodel.model import *
 from sdirl.menumodel.mdp import *
+from sdirl.rl.simulator import RLParams
 from sdirl.rl.utils import Path, Transition
 
 def simple_model(parameters=None, values=None):
@@ -16,6 +17,11 @@ def simple_model(parameters=None, values=None):
         parameters = [ModelParameter("focus_duration_100ms", bounds=(1,6))]
     if values is None:
         values = {"focus_duration": 4.0}
+    rl_params = RLParams(
+                 n_training_episodes=100000,
+                 n_episodes_per_epoch=20,
+                 n_simulation_episodes=100,
+                 q_alpha=0.2)
     msf = MenuSearchFactory(
                  parameters,
                  menu_type="semantic",
@@ -25,10 +31,7 @@ def simple_model(parameters=None, values=None):
                  gap_between_items=0.75,
                  prop_target_absent=0.1,
                  length_observations=False,
-                 n_training_menus=10000,
-                 n_training_episodes=100000,
-                 n_episodes_per_epoch=20,
-                 n_simulation_episodes=100)
+                 n_training_menus=10000)
     model = msf.get_new_instance(approximate=True)
     model.env.setup(values, np.random.RandomState(0))
     return model
