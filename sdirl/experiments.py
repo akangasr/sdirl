@@ -4,6 +4,7 @@ import json
 import time
 
 from sdirl.elfi_utils import *
+from elfi.async import wait
 
 from matplotlib import pyplot as pl
 from matplotlib.backends.backend_pdf import PdfPages
@@ -28,7 +29,7 @@ class BolfiResults(ExperimentResults):
                 "duration": self.duration,
                 }
 
-class MLErrors(ExperimentResults):
+class Errors(ExperimentResults):
     def __init__(self):
         self.errors = dict()
 
@@ -122,11 +123,11 @@ class ComputeBolfiPosterior(ExperimentPhase):
         pl.close()
 
 
-class ComputeBolfiMLErrors(ExperimentPhase):
+class ComputeBolfiErrors(ExperimentPhase):
     def __init__(self, *args, error_measures=list(), **kwargs):
-        super(ComputeBolfiMLErrors, self).__init__(*args, **kwargs)
+        super(ComputeBolfiErrors, self).__init__(*args, **kwargs)
         self.error_measures = error_measures
-        self.results = MLErrors()
+        self.results = Errors()
 
     def _run(self):
         bolfi_results = self.parents[0].results
@@ -161,7 +162,7 @@ class ComputeBolfiMLErrors(ExperimentPhase):
         pl.close()
 
     def to_dict(self):
-        ret = super(ComputeBolfiMLErrors, self).to_dict()
+        ret = super(ComputeBolfiErrors, self).to_dict()
         for e in self.error_measures:
             ret["{}".format(e)] = e.to_dict()
         return ret
@@ -198,6 +199,33 @@ class ErrorMeasure():
         return {
                 "inference_type": self.inference_type
                 }
+
+
+class DiscrepancyError(ErrorMeasure):
+    """ Calculates discrepancy to observations (assumed to be already inside the itask)
+
+    Parameters
+    ----------
+    itask : elfi.InferenceTask
+    """
+    def __init__(self, *args, itask=None, client=None, **kwargs):
+        super(DiscrepancyError, self).__init__(*args, **kwargs)
+        self.itask = itask
+        self.client = client
+
+    def _error(self, value):
+        # depends on elfi implementation details
+        wv_dict = {param.name: np.atleast_2d(value[i])
+                               for i, param in enumerate(self.itask.parameters)}
+        future = self.itask.discrepancy.generate(1, with_values=wv_dict)
+        result, _a, _b = elfi.wait([future], self.client)
+        return float(result)
+
+    def to_dict(self):
+        ret = super(DiscrepancyError, self).to_dict()
+        ret["itask"] = "inference task object" if self.itask is not None else None
+        ret["itask"] = "client object" if self.client is not None else None
+        return ret
 
 
 class GroundTruthError(ErrorMeasure):
@@ -293,15 +321,22 @@ class Experiment():
                 }
 
 
-class GroundTruthInferenceExperiment(Experiment):
+class InferenceExperiment(Experiment):
     def __init__(self,
             model,
             bolfi_params,
-            ground_truth,
+            ground_truth=None,
             plot_params=PlotParams(),
             error_classes=[L2Error, OrderError, ProportionError]):
-        super(GroundTruthInferenceExperiment, self).__init__(plot_params)
-        self.name = "Ground Truth Inference Experiment"
+        super(InferenceExperiment, self).__init__(plot_params)
+        self.name = "Inference Experiment "
+        assert model is not None
+        if model.observation is not None:
+            self.name += "with observation dataset"
+        elif ground_truth is not None:
+            self.name += "with ground truth = {}".format(ground_truth)
+        else:
+            raise ValueError("Need either ground truth or observation")
         self.model = model
         itf = InferenceTaskFactory(self.model)
         itask = itf.get_new_instance()
@@ -312,14 +347,23 @@ class GroundTruthInferenceExperiment(Experiment):
                                        bolfi = bolfi)
         self.add_phase(phase1)
 
-        error_measures = [klass(ground_truth=ground_truth,
-                                bolfi_params=self.bolfi_params.inference_type)
-                          for klass in error_classes]
-        self.add_phase(ComputeBolfiMLErrors(parents = [phase1],
+        error_measures = []
+        for klass in error_classes:
+            if issubclass(klass, GroundTruthError):
+                error_measures.append(klass(ground_truth=ground_truth,
+                                            inference_type=self.bolfi_params.inference_type))
+            elif issubclass(klass, DiscrepancyError):
+                error_measures.append(klass(itask=itask,
+                                            client=self.bolfi_params.client,
+                                            inference_type=self.bolfi_params.inference_type))
+            else:
+                raise ValueError("Unknown error class {}".format(klass))
+
+        self.add_phase(ComputeBolfiErrors(parents = [phase1],
                                       error_measures = error_measures))
 
     def to_dict(self):
-        ret = super(GroundTruthInferenceExperiment, self).to_dict()
+        ret = super(InferenceExperiment, self).to_dict()
         ret["model"] = self.model.to_dict()
         ret["bolfi params"] = self.bolfi_params.to_dict()
         return ret
