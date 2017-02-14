@@ -18,7 +18,7 @@ def get_model(parameters, ground_truth=None, observation=None):
                  n_training_episodes=10000000,
                  n_episodes_per_epoch=100,
                  n_simulation_episodes=10000,
-                 q_alpha=0.2,
+                 q_alpha=0.1,
                  q_gamma=0.98,
                  exp_epsilon=0.1,
                  exp_decay=1.0)
@@ -48,8 +48,8 @@ def get_bolfi_params(parameters):
     params = BolfiParams()
     params.bounds = tuple([p.bounds for p in parameters])
     params.sync = False
-    params.n_surrogate_samples = 30
-    params.batch_size = 10
+    params.n_surrogate_samples = 20
+    params.batch_size = 4
     params.noise_var = 0.1
     params.kernel_var = 1.0
     params.kernel_scale = 1.0
@@ -93,8 +93,8 @@ if __name__ == "__main__":
     bolfi_params = get_bolfi_params(parameters)
     bolfi_params.client = env.client
 
-    ground_truth = [4.0]
-    #observation = get_dataset()
+    #ground_truth = [4.0]
+    observation = get_dataset()
 
     model = get_model(parameters, ground_truth=ground_truth, observation=observation)
     run_inference_experiment(parameters, bolfi_params, model, ground_truth)

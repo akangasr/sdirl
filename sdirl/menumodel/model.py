@@ -2,6 +2,7 @@ import numpy as np
 
 from sdirl.menumodel.mdp import SearchEnvironment, SearchTask
 from sdirl.menumodel.observation import BaillyData
+from sdirl.menumodel.features import get_feature_set, plot_features
 from sdirl.rl.simulator import RLSimulator, RLParams
 from sdirl.model import SDIRLModel, SDIRLModelFactory, ObservationDataset
 import elfi
@@ -124,4 +125,9 @@ class MenuSearch(SDIRLModel):
             logger.warning("No observations from condition: target present = {}".format(present))
             return 0.0, 0.0
         return np.mean(tct), np.std(tct)
+
+    def plot_obs(self, obs):
+        assert isinstance(obs, ObservationDataset), type(obs)
+        features = get_feature_set(obs.data)
+        plot_features(features)
 

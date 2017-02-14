@@ -211,7 +211,11 @@ class SearchEnvironment(ParametricLoggingEnvironment):
         self.training = True
         self.n_item_lengths = 3
         self.log_session_variables = ["items", "target_present", "target_idx"]
-        self.log_step_variables = ["action_duration"]
+        self.log_step_variables = ["duration_focus_ms",
+                                   "duration_saccade_ms",
+                                   "action_duration",
+                                   "action",
+                                   "gaze_location"]
 
         # technical variables
         self.discreteStates = True
@@ -284,6 +288,10 @@ class SearchEnvironment(ParametricLoggingEnvironment):
 
         # misc environment state variables
         self.action_duration = None
+        self.duration_focus_ms = None
+        self.duration_saccade_ms = None
+        self.action = None
+        self.gaze_location = None
         self.n_actions = 0
         self.item_locations = np.arange(self.gap_between_items, self.gap_between_items*(self.n_items+2), self.gap_between_items)
         self._start_log_for_new_session()
@@ -292,7 +300,9 @@ class SearchEnvironment(ParametricLoggingEnvironment):
         """ Changes the state of the environment based on agent action """
         self.action = Action(int(action[0]))
         self.prev_state = self.state.copy()
-        self.state, self.action_duration = self.do_transition(self.state, self.action)
+        self.state, self.duration_focus_ms, self.duration_saccade_ms = self.do_transition(self.state, self.action)
+        self.action_duration = self.duration_focus_ms + self.duration_saccade_ms
+        self.gaze_location = int(self.state.focus)
         self.n_actions += 1
         self._log_transition()
 
@@ -374,7 +384,7 @@ class SearchEnvironment(ParametricLoggingEnvironment):
         else:
             raise ValueError("Unknown action: {}".format(action))
 
-        return state, saccade_duration + focus_duration
+        return state, focus_duration, saccade_duration
 
     @property
     def clicked_item(self):

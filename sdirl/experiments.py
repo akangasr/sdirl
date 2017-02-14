@@ -4,6 +4,7 @@ import json
 import time
 
 from sdirl.elfi_utils import *
+from sdirl.model import ObservationDataset
 from elfi.async import wait
 
 from matplotlib import pyplot as pl
@@ -105,6 +106,11 @@ class ComputeBolfiPosterior(ExperimentPhase):
             self.results.posteriors = self._posterior_class.from_store(self.bolfi.store)
         else:
             self.results.posteriors = [posterior]
+        final_posterior = self.results.posteriors[-1]
+        if hasattr(final_posterior, "ML"):
+            logger.info("Final ML estimate: {}".format(final_posterior.ML))
+        if hasattr(final_posterior, "MAP"):
+            logger.info("Final MAP estimate: {}".format(final_posterior.MAP))
 
     def _plot(self, plot_params):
         for posterior in self.results.posteriors:
@@ -138,6 +144,8 @@ class ComputeBolfiErrors(ExperimentPhase):
         for e, errors in self.results.errors.items():
             self._print_error(e, errors)
             self._plot_error(e, errors, plot_params)
+        for em in self.error_measures:
+            em.plot(plot_params)
 
     def _print_error(self, e, errors, grid=30):
         logger.info("{}".format(e))
@@ -190,6 +198,9 @@ class ErrorMeasure():
                     .format(self.inference_type))
         return estimates
 
+    def plot(self, plot_params):
+        pass
+
     def __repr__(self):
         return "Error"
 
@@ -209,18 +220,65 @@ class DiscrepancyError(ErrorMeasure):
     ----------
     itask : elfi.InferenceTask
     """
-    def __init__(self, *args, itask=None, client=None, **kwargs):
+    def __init__(self, *args, model=None, itask=None, client=None, **kwargs):
         super(DiscrepancyError, self).__init__(*args, **kwargs)
+        self.model = model
         self.itask = itask
         self.client = client
+        self._plot_store = list()  # hacky
+        self._obs = None  # hacky
+        self.called = False
 
     def _error(self, value):
-        # depends on elfi implementation details
+        # hacky, depends on elfi and dask implementation details
+        discrepancy = self._compute_discrepancy(value)
+        sim = self._get_simulator()
+        if self._obs is None:
+            self._obs = sim.observed[0][0]
+        data = self._get_last_sim_data(sim)
+        self._plot_store.append((value, data))
+        return discrepancy
+
+    def _compute_discrepancy(self, value):
         wv_dict = {param.name: np.atleast_2d(value[i])
                                for i, param in enumerate(self.itask.parameters)}
         future = self.itask.discrepancy.generate(1, with_values=wv_dict)
         result, _a, _b = elfi.wait([future], self.client)
         return float(result)
+
+    def _get_simulator(self):
+        return self.itask._find_by_class(elfi.Simulator)[0]
+
+    def _get_last_sim_data(self, sim):
+        i = 0
+        data = None
+        while True:
+            sim_data = sim[i].compute()
+            if len(sim_data) > 0:
+                data = sim_data
+            else:
+                break
+            i += 1
+        assert isinstance(data[0][0], ObservationDataset), data
+        return data[0][0]
+
+    def plot(self, plot_params):
+        # hacky
+        long_fig = (8.27, 25)
+        print("G")
+        fig = pl.figure(figsize=long_fig)
+        fig.text(0.02, 0.01, "Observed data")
+        self.model.plot_obs(self._obs)
+        plot_params.pdf.savefig()
+        pl.close()
+        print("H")
+        for v, data in self._plot_store:
+            fig = pl.figure(figsize=long_fig)
+            fig.text(0.02, 0.01, "Simulated at {}".format(v))
+            self.model.plot_obs(data)
+            plot_params.pdf.savefig()
+            pl.close()
+        print("I")
 
     def to_dict(self):
         ret = super(DiscrepancyError, self).to_dict()
@@ -354,7 +412,8 @@ class InferenceExperiment(Experiment):
                 error_measures.append(klass(ground_truth=ground_truth,
                                             inference_type=self.bolfi_params.inference_type))
             elif issubclass(klass, DiscrepancyError):
-                error_measures.append(klass(itask=itask,
+                error_measures.append(klass(model=model,
+                                            itask=itask,
                                             client=self.bolfi_params.client,
                                             inference_type=self.bolfi_params.inference_type))
             else:

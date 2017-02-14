@@ -171,6 +171,9 @@ class ModelBase():
         self.observation = observation
         self.ground_truth = ground_truth
 
+    def plot_obs(self, obs):
+        pass
+
     def to_dict(self):
         """ Returns a json-serializable dict
         """

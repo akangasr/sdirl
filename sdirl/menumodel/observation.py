@@ -149,7 +149,7 @@ class BaillyData():
             self.log["session"] += 1
             self.log["sessions"].append(dict())
         self.step_data = self.log["sessions"][self.log["session"]]
-        self.step_data["target"]        = target
+        self.step_data["target_idx"]    = target
         self.step_data["user_id"]       = user
         self.step_data["items"]         = None
         self.step_data["observation"]   = list()
@@ -279,7 +279,7 @@ class BaillyData():
             if len(self.allowed_users) > 0 and session["user_id"] not in self.allowed_users:
                 continue
 
-            if session["target"] is not None:
+            if session["target_present"] is True:
                 current_trials_per_user_present[session["user_id"]].append(session)
             else:
                 current_trials_per_user_absent[session["user_id"]].append(session)
