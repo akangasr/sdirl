@@ -105,9 +105,9 @@ class SerializableBolfiPosterior(BolfiPosterior):  # TODO: add this to elfi?
         data = {
             "X_params": self.model.gp.X.tolist() if self.model.gp is not None else [],
             "Y_disc": self.model.gp.Y.tolist() if self.model.gp is not None else [],
-            "kernel_class": self.model.kernel.__class__.__name__,
-            "kernel_var": float(self.model.kernel.variance),
-            "kernel_scale": float(self.model.kernel.lengthscale),
+            "kernel_class": self.model.kernel_class.__name__,
+            "kernel_var": self.model.kernel_var,
+            "kernel_scale": self.model.kernel_scale,
             "noise_var": self.model.noise_var,
             "threshold": self.threshold,
             "bounds": self.model.bounds,

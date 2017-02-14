@@ -37,15 +37,17 @@ def get_model(parameters, ground_truth, grid_size, approximate):
 def get_bolfi_params(parameters):
     params = BolfiParams()
     params.bounds = tuple([p.bounds for p in parameters])
-    params.sync = True
     params.n_surrogate_samples = 1
     params.batch_size = 1
-    params.noise_var = 1.0
+    params.sync = True
+    params.noise_var = 0.1
     params.kernel_var = 1.0
     params.kernel_scale = 1.0
+    params.rbf_scale = 0.05
+    params.rbf_amplitude = 1.0
     params.kernel_class = GPy.kern.RBF
     params.gp_params_optimizer = "scg"
-    params.gp_params_max_opt_iters = 10
+    params.gp_params_max_opt_iters = 100
     params.exploration_rate = 1.0
     params.acq_opt_iterations = 1000
     params.batches_of_init_samples = 1

@@ -48,16 +48,16 @@ def get_bolfi_params(parameters):
     params = BolfiParams()
     params.bounds = tuple([p.bounds for p in parameters])
     params.sync = False
-    params.n_surrogate_samples = 100
-    params.batch_size = 20
-    params.noise_var = 0.05
+    params.n_surrogate_samples = 30
+    params.batch_size = 10
+    params.noise_var = 0.1
     params.kernel_var = 1.0
     params.kernel_scale = 1.0
     params.rbf_scale = 0.05
     params.rbf_amplitude = 1.0
     params.kernel_class = GPy.kern.RBF
     params.gp_params_optimizer = "scg"
-    params.gp_params_max_opt_iters = 10
+    params.gp_params_max_opt_iters = 100
     params.exploration_rate = 1.0
     params.acq_opt_iterations = 1000
     params.batches_of_init_samples = 1
@@ -88,14 +88,13 @@ if __name__ == "__main__":
 
     parameters = [ModelParameter("focus_duration_100ms", bounds=(1,6))]
     ground_truth = None
+    observation = None
 
     bolfi_params = get_bolfi_params(parameters)
     bolfi_params.client = env.client
 
-    #ground_truth = [4.0]
-    #model = get_model(parameters, ground_truth=ground_truth)
+    ground_truth = [4.0]
+    #observation = get_dataset()
 
-    observation = get_dataset()
-    model = get_model(parameters, observation=observation)
-
+    model = get_model(parameters, ground_truth=ground_truth, observation=observation)
     run_inference_experiment(parameters, bolfi_params, model, ground_truth)

@@ -38,9 +38,14 @@ def get_bolfi_params(parameters):
     params = BolfiParams()
     params.bounds = tuple([p.bounds for p in parameters])
     params.sync = False
+    params.noise_var = 0.1
+    params.kernel_var = 1.0
+    params.kernel_scale = 1.0
+    params.rbf_scale = 0.05
+    params.rbf_amplitude = 1.0
     params.kernel_class = GPy.kern.RBF
     params.gp_params_optimizer = "scg"
-    params.gp_params_max_opt_iters = 10
+    params.gp_params_max_opt_iters = 100
     params.exploration_rate = 1.0
     params.acq_opt_iterations = 1000
     params.batches_of_init_samples = 1
@@ -65,17 +70,17 @@ def run_ground_truth_inference_experiment(parameters, bolfi_params, ground_truth
 if __name__ == "__main__":
     env = Environment(sys.argv)
 
-    #n_features = 2
+    n_features = 2
     #n_features = 3
-    n_features = 4
+    #n_features = 4
 
     parameters = list()
     n_samples = 0
     batch = 0
     for i in range(1, n_features+1):
         parameters.append(ModelParameter("feature{}_value".format(i), bounds=(-1, 0)))
-        n_samples += 100
-        batch += 10
+        n_samples += 30
+        batch += 30
     if n_features == 4:
         ground_truth = [-0.2, -0.4, -0.6, -0.8]
     if n_features == 3:
@@ -97,17 +102,5 @@ if __name__ == "__main__":
         bolfi_params.n_surrogate_samples = n_samples
         bolfi_params.batch_size = batch
         bolfi_params.client = env.client
-        if approximate is True:
-            bolfi_params.noise_var = 1.0
-            bolfi_params.kernel_var = 1.0
-            bolfi_params.kernel_scale = 1.0
-            bolfi_params.rbf_scale = 0.05
-            bolfi_params.rbf_amplitude = 1.0
-        else:
-            bolfi_params.noise_var = 1.0
-            bolfi_params.kernel_var = 1.0
-            bolfi_params.kernel_scale = 100.0
-            bolfi_params.rbf_scale = 0.05
-            bolfi_params.rbf_amplitude = 100.0
 
         run_ground_truth_inference_experiment(parameters, bolfi_params, ground_truth, model, approximate)
