@@ -362,6 +362,7 @@ class SDIRLModel(ModelBase):
         if not np.array_equal(self._prev_parameters, parameters):
             self.rl.train_model(parameters, random_state=random_state)
             self._prev_parameters = parameters
+            self._paths = None
             self._precomp_obs_logprobs = dict()
             self.print_model()
 

@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 def get_model(parameters, ground_truth=None, observation=None):
     rl_params = RLParams(
-                 n_training_episodes=10000000,
+                 n_training_episodes=20000000,
                  n_episodes_per_epoch=100,
                  n_simulation_episodes=10000,
                  q_alpha=0.1,
@@ -31,7 +31,7 @@ def get_model(parameters, ground_truth=None, observation=None):
                  gap_between_items=0.75,
                  prop_target_absent=0.1,
                  length_observations=False,
-                 n_training_menus=10000,
+                 n_training_menus=100000,
                  rl_params=rl_params,
                  ground_truth=ground_truth,
                  observation=observation)
@@ -47,14 +47,12 @@ def get_dataset():
 def get_bolfi_params(parameters):
     params = BolfiParams()
     params.bounds = tuple([p.bounds for p in parameters])
-    params.sync = False
+    params.sync = True
     params.n_surrogate_samples = 20
-    params.batch_size = 4
-    params.noise_var = 0.1
+    params.batch_size = 5
+    params.noise_var = 0.5
     params.kernel_var = 1.0
-    params.kernel_scale = 1.0
-    params.rbf_scale = 0.05
-    params.rbf_amplitude = 1.0
+    params.kernel_scale = 5.0
     params.kernel_class = GPy.kern.RBF
     params.gp_params_optimizer = "scg"
     params.gp_params_max_opt_iters = 100

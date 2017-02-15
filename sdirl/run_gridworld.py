@@ -37,12 +37,8 @@ def get_model(parameters, ground_truth, world_seed, approximate):
 def get_bolfi_params(parameters):
     params = BolfiParams()
     params.bounds = tuple([p.bounds for p in parameters])
-    params.sync = False
-    params.noise_var = 0.1
+    params.sync = True
     params.kernel_var = 1.0
-    params.kernel_scale = 1.0
-    params.rbf_scale = 0.05
-    params.rbf_amplitude = 1.0
     params.kernel_class = GPy.kern.RBF
     params.gp_params_optimizer = "scg"
     params.gp_params_max_opt_iters = 100
@@ -79,8 +75,8 @@ if __name__ == "__main__":
     batch = 0
     for i in range(1, n_features+1):
         parameters.append(ModelParameter("feature{}_value".format(i), bounds=(-1, 0)))
-        n_samples += 30
-        batch += 30
+        n_samples += 100
+        batch += 10
     if n_features == 4:
         ground_truth = [-0.2, -0.4, -0.6, -0.8]
     if n_features == 3:
@@ -102,5 +98,11 @@ if __name__ == "__main__":
         bolfi_params.n_surrogate_samples = n_samples
         bolfi_params.batch_size = batch
         bolfi_params.client = env.client
+        if approximate is True:
+            bolfi_params.noise_var = 0.1
+            bolfi_params.kernel_scale = 1.0
+        else:
+            bolfi_params.noise_var = 5.0  # should be relatively more accurate than approx
+            bolfi_params.kernel_scale = 200.0
 
         run_ground_truth_inference_experiment(parameters, bolfi_params, ground_truth, model, approximate)

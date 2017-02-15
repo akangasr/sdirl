@@ -37,12 +37,8 @@ def get_model(parameters, grid_size, ground_truth, world_seed):
 def get_bolfi_params(parameters):
     params = BolfiParams()
     params.bounds = tuple([p.bounds for p in parameters])
-    params.sync = False
-    params.noise_var = 0.1
+    params.sync = True
     params.kernel_var = 1.0
-    params.kernel_scale = 1.0
-    params.rbf_scale = 0.05
-    params.rbf_amplitude = 1.0
     params.kernel_class = GPy.kern.RBF
     params.gp_params_optimizer = "scg"
     params.gp_params_max_opt_iters = 100
@@ -100,6 +96,14 @@ if __name__ == "__main__":
     bolfi_params.n_surrogate_samples = n_samples
     bolfi_params.batch_size = batch
     bolfi_params.client = env.client
+    if grid_size == 9:
+        scale = 5.0
+    elif grid_size == 13:
+        scale = 10.0
+    elif grid_size == 19:
+        scale = 20.0
+    bolfi_params.noise_var = scale / 10.0
+    bolfi_params.kernel_scale = scale
 
     run_ground_truth_inference_experiment(parameters, bolfi_params, ground_truth, model)
 
