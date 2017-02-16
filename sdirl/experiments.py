@@ -91,6 +91,7 @@ class ComputeBolfiPosterior(ExperimentPhase):
 
     def __init__(self, *args, bolfi=None, **kwargs):
         super(ComputeBolfiPosterior, self).__init__(*args, **kwargs)
+        self.name = "Compute Bolfi Posterior"
         self.bolfi = bolfi
         self.results = BolfiResults()
         self._posterior_class = SerializableBolfiPosterior
@@ -132,6 +133,7 @@ class ComputeBolfiPosterior(ExperimentPhase):
 class ComputeBolfiErrors(ExperimentPhase):
     def __init__(self, *args, error_measures=list(), **kwargs):
         super(ComputeBolfiErrors, self).__init__(*args, **kwargs)
+        self.name = "Compute Bolfi Errors"
         self.error_measures = error_measures
         self.results = Errors()
 
