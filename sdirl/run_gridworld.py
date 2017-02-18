@@ -13,7 +13,7 @@ from sdirl.rl.simulator import RLParams
 import logging
 logger = logging.getLogger(__name__)
 
-def get_model(parameters, ground_truth, world_seed, approximate):
+def get_model(parameters, ground_truth, world_seed, approximate, size):
     rl_params = RLParams(
                  n_training_episodes=100000,
                  n_episodes_per_epoch=100,
@@ -23,7 +23,7 @@ def get_model(parameters, ground_truth, world_seed, approximate):
                  exp_epsilon=0.1,
                  exp_decay=1.0)
     gwf = GridWorldFactory(parameters,
-            grid_size=5,
+            grid_size=size,
             step_penalty=0.05,
             prob_rnd_move=0.05,
             world_seed=world_seed,
@@ -38,13 +38,13 @@ def get_bolfi_params(parameters):
     params = BolfiParams()
     params.bounds = tuple([p.bounds for p in parameters])
     params.sync = True
-    params.kernel_var = 1.0
+    params.kernel_scale = 0.2  # 20% of bounds
     params.kernel_class = GPy.kern.RBF
     params.gp_params_optimizer = "scg"
     params.gp_params_max_opt_iters = 100
     params.exploration_rate = 1.0
     params.acq_opt_iterations = 1000
-    params.batches_of_init_samples = 1
+    params.batches_of_init_samples = 2  # 20% of samples
     params.inference_type = InferenceType.ML
     params.use_store = True
     return params
@@ -69,14 +69,16 @@ if __name__ == "__main__":
     n_features = 2
     #n_features = 3
     #n_features = 4
+    #size = 5
+    size = 7
 
     parameters = list()
     n_samples = 0
     batch = 0
     for i in range(1, n_features+1):
         parameters.append(ModelParameter("feature{}_value".format(i), bounds=(-1, 0)))
-        n_samples += 100
-        batch += 10
+        n_samples += 200
+        batch += 20
     if n_features == 4:
         ground_truth = [-0.2, -0.4, -0.6, -0.8]
     if n_features == 3:
@@ -89,7 +91,7 @@ if __name__ == "__main__":
     obs = None
 
     for approximate in [True, False]:
-        model = get_model(parameters, ground_truth, world_seed, approximate)
+        model = get_model(parameters, ground_truth, world_seed, approximate, size)
         if obs is None:
             # use same observation for both inferences
             obs = model.simulator(*ground_truth, random_state=env.random_state)[0]
@@ -99,10 +101,10 @@ if __name__ == "__main__":
         bolfi_params.batch_size = batch
         bolfi_params.client = env.client
         if approximate is True:
-            bolfi_params.noise_var = 0.1
-            bolfi_params.kernel_scale = 1.0
+            bolfi_params.kernel_var = 1.0
+            bolfi_params.noise_var = 0.1  # 10%, quite noisy
         else:
-            bolfi_params.noise_var = 5.0  # should be relatively more accurate than approx
-            bolfi_params.kernel_scale = 200.0
+            bolfi_params.kernel_var = 200.0
+            bolfi_params.noise_var = 0.2  # 0.1%, should be very accurate
 
         run_ground_truth_inference_experiment(parameters, bolfi_params, ground_truth, model, approximate)

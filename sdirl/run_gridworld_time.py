@@ -13,7 +13,7 @@ from sdirl.rl.simulator import RLParams
 import logging
 logger = logging.getLogger(__name__)
 
-def get_model(parameters, ground_truth, grid_size, approximate):
+def get_model(parameters, ground_truth, grid_size, approximate, maxlen):
     rl_params = RLParams(
                  n_training_episodes=10000,
                  n_episodes_per_epoch=100,
@@ -28,7 +28,7 @@ def get_model(parameters, ground_truth, grid_size, approximate):
             prob_rnd_move=0.05,
             world_seed=1234,
             rl_params=rl_params,
-            max_sim_episode_len=7,
+            max_sim_episode_len=maxlen,
             ground_truth=ground_truth,
             initial_state="edge",
             grid_type="walls")
@@ -72,13 +72,16 @@ def run_ground_truth_inference_experiment(parameters, bolfi_params, ground_truth
 if __name__ == "__main__":
     env = Environment(sys.argv)
 
+    #maxlen = 7
+    maxlen = 8
+
     parameters = [ModelParameter("feature1_value", bounds=(-0.001, 0))]
     ground_truth = [0.0]
 
     for grid_size in [3, 5, 7]:
         obs = None
         for approximate in [True, False]:
-            model = get_model(parameters, ground_truth, grid_size, approximate)
+            model = get_model(parameters, ground_truth, grid_size, approximate, maxlen)
             if obs is None:
                 # use same observation for both inferences
                 obs = model.simulator(*ground_truth, random_state=env.random_state)[0]

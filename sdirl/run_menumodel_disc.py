@@ -48,17 +48,17 @@ def get_bolfi_params(parameters):
     params = BolfiParams()
     params.bounds = tuple([p.bounds for p in parameters])
     params.sync = True
-    params.n_surrogate_samples = 20
-    params.batch_size = 5
+    params.n_surrogate_samples = 50
+    params.batch_size = 10
     params.noise_var = 0.5
-    params.kernel_var = 1.0
-    params.kernel_scale = 5.0
+    params.kernel_var = 5.0 ** 2  # std = 50% of emp.max
+    params.kernel_scale = 0.2  # 20% of bounds
     params.kernel_class = GPy.kern.RBF
     params.gp_params_optimizer = "scg"
     params.gp_params_max_opt_iters = 100
     params.exploration_rate = 1.0
     params.acq_opt_iterations = 1000
-    params.batches_of_init_samples = 1
+    params.batches_of_init_samples = 1  # 20%
     params.inference_type = InferenceType.ML
     params.use_store = False  # because of discerror measure
     return params
@@ -84,7 +84,7 @@ def run_inference_experiment(parameters, bolfi_params, model, ground_truth=None)
 if __name__ == "__main__":
     env = Environment(sys.argv)
 
-    parameters = [ModelParameter("focus_duration_100ms", bounds=(1,6))]
+    parameters = [ModelParameter("focus_duration_100ms", bounds=(0,6))]
     ground_truth = None
     observation = None
 

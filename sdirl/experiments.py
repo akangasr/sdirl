@@ -244,43 +244,42 @@ class DiscrepancyError(ErrorMeasure):
     def _compute_discrepancy(self, value):
         wv_dict = {param.name: np.atleast_2d(value[i])
                                for i, param in enumerate(self.itask.parameters)}
+        logger.info("Simulating data with values {}..".format(value))
         future = self.itask.discrepancy.generate(1, with_values=wv_dict)
         result, _a, _b = elfi.wait([future], self.client)
+        logger.info("Simulated")
         return float(result)
 
     def _get_simulator(self):
         return self.itask._find_by_class(elfi.Simulator)[0]
 
     def _get_last_sim_data(self, sim):
-        i = 0
+        i = 9999  # assume larger than any sample id we have
         data = None
+        logger.info("Finding last sim data..")
         while True:
-            sim_data = sim[i].compute()
-            if len(sim_data) > 0:
-                data = sim_data
-            else:
+            data = sim[i].compute()
+            if len(data) > 0:
                 break
-            i += 1
+            i -= 1
+        logger.info("Found at idx {}".format(i))
         assert isinstance(data[0][0], ObservationDataset), data
         return data[0][0]
 
     def plot(self, plot_params):
         # hacky
         long_fig = (8.27, 25)
-        print("G")
         fig = pl.figure(figsize=long_fig)
         fig.text(0.02, 0.01, "Observed data")
         self.model.plot_obs(self._obs)
         plot_params.pdf.savefig()
         pl.close()
-        print("H")
         for v, data in self._plot_store:
             fig = pl.figure(figsize=long_fig)
             fig.text(0.02, 0.01, "Simulated at {}".format(v))
             self.model.plot_obs(data)
             plot_params.pdf.savefig()
             pl.close()
-        print("I")
 
     def to_dict(self):
         ret = super(DiscrepancyError, self).to_dict()

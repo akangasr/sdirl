@@ -38,13 +38,13 @@ def get_bolfi_params(parameters):
     params = BolfiParams()
     params.bounds = tuple([p.bounds for p in parameters])
     params.sync = True
-    params.kernel_var = 1.0
+    params.kernel_scale = 0.2  # 20% of bounds
     params.kernel_class = GPy.kern.RBF
     params.gp_params_optimizer = "scg"
     params.gp_params_max_opt_iters = 100
     params.exploration_rate = 1.0
     params.acq_opt_iterations = 1000
-    params.batches_of_init_samples = 1
+    params.batches_of_init_samples = 4  # 20% of samples
     params.inference_type = InferenceType.ML
     params.use_store = True
     return params
@@ -69,9 +69,9 @@ if __name__ == "__main__":
     n_features = 2
     #n_features = 3
     #n_features = 4
-    #grid_size = 9
+    grid_size = 9
     #grid_size = 13
-    grid_size = 19
+    #grid_size = 19
     #grid_size = 23
     #grid_size = 29
 
@@ -80,7 +80,7 @@ if __name__ == "__main__":
     batch = 0
     for i in range(1, n_features+1):
         parameters.append(ModelParameter("feature{}_value".format(i), bounds=(-1, 0)))
-        n_samples += 100
+        n_samples += 200
         batch += 10
     if n_features == 4:
         ground_truth = [-0.2, -0.4, -0.6, -0.8]
@@ -97,13 +97,13 @@ if __name__ == "__main__":
     bolfi_params.batch_size = batch
     bolfi_params.client = env.client
     if grid_size == 9:
-        scale = 5.0
+        var = 5.0  # ~50% of emp max diff
     elif grid_size == 13:
-        scale = 10.0
+        var = 10.0  # ~50% of emp max diff
     elif grid_size == 19:
-        scale = 20.0
-    bolfi_params.noise_var = scale / 10.0
-    bolfi_params.kernel_scale = scale
+        var = 20.0  # ~50% of emp max diff
+    bolfi_params.kernel_var = var
+    bolfi_params.noise_var = var / 10.0  # 10%, quite noisy
 
     run_ground_truth_inference_experiment(parameters, bolfi_params, ground_truth, model)
 
