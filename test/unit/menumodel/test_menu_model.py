@@ -132,6 +132,34 @@ class TestSearchMDP():
         env.performAction([int(Action.QUIT)])
         assert sum(env.log["sessions"][1]["action_duration"]) == 0
 
+    def test_actions_are_logged_corectly(self):
+        env = simple_model().env
+        env.start_logging()
+        env.reset()
+        env.performAction([int(Action.LOOK_1)])
+        env.performAction([int(Action.LOOK_2)])
+        env.performAction([int(Action.LOOK_3)])
+        env.performAction([int(Action.LOOK_4)])
+        env.performAction([int(Action.CLICK)])
+        assert len(env.log["sessions"][0]["action"]) == 5
+        assert env.log["sessions"][0]["action"][0] == 0
+        assert env.log["sessions"][0]["action"][1] == 1
+        assert env.log["sessions"][0]["action"][2] == 2
+        assert env.log["sessions"][0]["action"][3] == 3
+        assert env.log["sessions"][0]["action"][4] == 8
+        env.reset()
+        env.performAction([int(Action.LOOK_8)])
+        env.performAction([int(Action.LOOK_7)])
+        env.performAction([int(Action.LOOK_6)])
+        env.performAction([int(Action.LOOK_5)])
+        env.performAction([int(Action.QUIT)])
+        assert len(env.log["sessions"][0]["action"]) == 5
+        assert env.log["sessions"][1]["action"][0] == 7
+        assert env.log["sessions"][1]["action"][1] == 6
+        assert env.log["sessions"][1]["action"][2] == 5
+        assert env.log["sessions"][1]["action"][3] == 4
+        assert env.log["sessions"][1]["action"][4] == 9
+
 
 class TestMenuSearchModel():
 
