@@ -284,7 +284,9 @@ class DiscrepancyError(ErrorMeasure):
     def to_dict(self):
         ret = super(DiscrepancyError, self).to_dict()
         ret["itask"] = "inference task object" if self.itask is not None else None
-        ret["itask"] = "client object" if self.client is not None else None
+        ret["client"] = "client object" if self.client is not None else None
+        for v, data in self._plot_store:
+            ret["sim_at_{}".format(v)] = data.to_dict()
         return ret
 
 

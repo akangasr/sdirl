@@ -88,7 +88,6 @@ class Quit(IntEnum):
     HAS_QUIT = 1
 
 class Focus(IntEnum):  # assume 8 items in menu
-    ABOVE_MENU = -1
     ITEM_1 = 0
     ITEM_2 = 1
     ITEM_3 = 2
@@ -97,6 +96,7 @@ class Focus(IntEnum):  # assume 8 items in menu
     ITEM_6 = 5
     ITEM_7 = 6
     ITEM_8 = 7
+    ABOVE_MENU = 8
 
 class Click(IntEnum):  # assume 8 items in menu
     CLICK_1 = 0
@@ -336,7 +336,10 @@ class SearchEnvironment(ParametricLoggingEnvironment):
         if action != Action.CLICK and action != Action.QUIT:
             # saccade
             # item_locations are off-by-one to other lists
-            amplitude = abs(self.item_locations[int(state.focus)+1] - self.item_locations[int(action)+1])
+            if state.focus != Focus.ABOVE_MENU:
+                amplitude = abs(self.item_locations[int(state.focus)+1] - self.item_locations[int(action)+1])
+            else:
+                amplitude = abs(self.item_locations[0] - self.item_locations[int(action)+1])
             saccade_duration = int(37 + 2.7 * amplitude)
             state.focus = Focus(int(action))  # assume these match
 
