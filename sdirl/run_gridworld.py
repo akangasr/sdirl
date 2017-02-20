@@ -101,10 +101,10 @@ if __name__ == "__main__":
         bolfi_params.batch_size = batch
         bolfi_params.client = env.client
         if approximate is True:
-            bolfi_params.kernel_var = 1.0
-            bolfi_params.noise_var = 0.1  # 10%, quite noisy
+            bolfi_params.kernel_var = 1.5
+            bolfi_params.noise_var = 0.15  # 10%, quite noisy
         else:
-            bolfi_params.kernel_var = 200.0
-            bolfi_params.noise_var = 0.2  # 0.1%, should be very accurate
+            bolfi_params.kernel_var = 1.5
+            bolfi_params.noise_var = 0.015  # 1%, should be quite accurate
 
         run_ground_truth_inference_experiment(parameters, bolfi_params, ground_truth, model, approximate)

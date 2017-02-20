@@ -240,7 +240,7 @@ class SDIRLModel(ModelBase):
         observations = obs_data[0][0].data
         return np.atleast_1d([-1 * self.evaluate_loglikelihood(parameters, observations, random_state)])
 
-    def evaluate_loglikelihood(self, parameters, observations, random_state):
+    def evaluate_loglikelihood(self, parameters, observations, random_state, scale=100.0):
         assert len(observations) > 0
         ind_log_obs_probs = list()
         policy = self._get_optimal_policy(parameters, random_state)
@@ -277,7 +277,7 @@ class SDIRLModel(ModelBase):
         end_time1 = time.time()
         duration1 = end_time1 - start_time1
         logger.info("Logl evaluated in {} seconds".format(duration1))
-        return sum(ind_log_obs_probs)
+        return sum(ind_log_obs_probs) / scale
 
     def _fill_path_tree(self, obs, full_path_len, prune=True):
         """ Recursively fill path tree starting from obs
