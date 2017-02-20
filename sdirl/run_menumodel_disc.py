@@ -52,7 +52,7 @@ def get_bolfi_params(parameters):
     params.batch_size = 10
     params.noise_var = 0.5
     params.kernel_var = 5.0 ** 2  # std = 50% of emp.max
-    params.kernel_scale = 0.2  # 20% of bounds
+    params.kernel_scale = 1.2  # 20% of bounds
     params.kernel_class = GPy.kern.RBF
     params.gp_params_optimizer = "scg"
     params.gp_params_max_opt_iters = 100

@@ -254,7 +254,7 @@ class DiscrepancyError(ErrorMeasure):
         return self.itask._find_by_class(elfi.Simulator)[0]
 
     def _get_last_sim_data(self, sim):
-        i = 9999  # assume larger than any sample id we have
+        i = 1000  # assume larger than any sample id we have
         data = None
         logger.info("Finding last sim data..")
         while True:
