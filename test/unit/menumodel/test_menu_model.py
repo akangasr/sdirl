@@ -160,6 +160,23 @@ class TestSearchMDP():
         assert env.log["sessions"][1]["action"][3] == 4
         assert env.log["sessions"][1]["action"][4] == 9
 
+    def test_paths_are_logged_correctly(self):
+        env = simple_model().env
+        env.start_logging()
+        env.reset()
+        env.performAction([int(Action.LOOK_1)])
+        env.performAction([int(Action.LOOK_2)])
+        env.performAction([int(Action.LOOK_3)])
+        env.performAction([int(Action.LOOK_4)])
+        env.performAction([int(Action.CLICK)])
+        print(env.log["sessions"][0]["path"])
+        for i in range(len(env.log["sessions"][0]["path"].transitions)-1):
+            assert env.log["sessions"][0]["path"].transitions[i].next_state == env.log["sessions"][0]["path"].transitions[i+1].prev_state, i
+        assert env.log["sessions"][0]["path"].transitions[0].action == Action.LOOK_1
+        assert env.log["sessions"][0]["path"].transitions[1].action == Action.LOOK_2
+        assert env.log["sessions"][0]["path"].transitions[2].action == Action.LOOK_3
+        assert env.log["sessions"][0]["path"].transitions[3].action == Action.LOOK_4
+
     def test_target_item_at_equal_probability_at_any_location_or_absent(self):
         env = simple_model().env
         idx = [0,1,2,3,4,5,6,7,None]

@@ -327,6 +327,7 @@ class SearchEnvironment(ParametricLoggingEnvironment):
         -------
         tuple (State, int) with new state and action duration in ms
         """
+        state = state.copy()
         # menu recall event may happen at first action
         if self.n_actions == 0:
             if "menu_recall_probability" in self.v and self.random_state.rand() < float(self.v["menu_recall_probability"]):

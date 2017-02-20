@@ -126,6 +126,30 @@ class TestGridWorldEnvironment():
                     assert 1.0 > trans_prob > 0.0
                     assert np.abs(emp_trans_prob - trans_prob) < 0.005, transition
 
+    def test_paths_are_logged_correctly(self):
+        goal_state = State(0,0)
+        env = GridWorldEnvironment(grid_size=3,
+                goal_state=goal_state,
+                n_features=1,
+                prob_rnd_move=1.0,
+                initial_state_generator=InitialStateUniformlyAtEdge(grid_size=3),
+                grid_generator=UniformGrid())
+        task = GridWorldTask(env, 20, -0.1)
+        env.setup({"feature1_value":0}, np.random.RandomState(0))
+        task.setup({"feature1_value":0})
+        env.start_logging()
+        env.reset()
+        env.performAction([int(Action.UP)])
+        env.performAction([int(Action.DOWN)])
+        env.performAction([int(Action.LEFT)])
+        env.performAction([int(Action.RIGHT)])
+        for i in range(len(env.log["sessions"][0]["path"])-1):
+            assert env.log["sessions"][0]["path"].transitions[i].next_state == env.log["sessions"][0]["path"].transitions[i+1].prev_state
+        assert env.log["sessions"][0]["path"].transitions[0].action == Action.UP
+        assert env.log["sessions"][0]["path"].transitions[1].action == Action.DOWN
+        assert env.log["sessions"][0]["path"].transitions[2].action == Action.LEFT
+        assert env.log["sessions"][0]["path"].transitions[3].action == Action.RIGHT
+
 
 class TestGridWorld():
 
