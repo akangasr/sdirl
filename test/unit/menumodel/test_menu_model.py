@@ -160,6 +160,21 @@ class TestSearchMDP():
         assert env.log["sessions"][1]["action"][3] == 4
         assert env.log["sessions"][1]["action"][4] == 9
 
+    def test_target_item_at_equal_probability_at_any_location_or_absent(self):
+        env = simple_model().env
+        idx = [0,1,2,3,4,5,6,7,None]
+        locs = dict()
+        for i in idx:
+            locs[i] = 0
+        n_reps = 10000
+        for i in range(n_reps):
+            env.reset()
+            locs[env.target_idx] += 1
+        tgt = n_reps / float(len(idx))
+        assert sum(locs.values()) == n_reps
+        for i in idx:
+            assert np.abs(locs[i] - tgt) < 100
+
 
 class TestMenuSearchModel():
 

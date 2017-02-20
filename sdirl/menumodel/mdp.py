@@ -417,7 +417,7 @@ class SearchEnvironment(ParametricLoggingEnvironment):
 
         """randomly select whether the target is present or abscent"""
         target_type = self.random_state.rand()
-        target_location = self.random_state.randint(0, (n_items - 1))
+        target_location = self.random_state.randint(0, n_items)
 
         if target_type > p_absent:
             target_group_samples = self.random_state.beta \
