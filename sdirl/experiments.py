@@ -193,7 +193,7 @@ class ErrorMeasure():
     def _get_bolfi_estimates(self, bolfi_results):
         if self.inference_type == InferenceType.ML:
             estimates = [p.ML for p in bolfi_results.posteriors]
-        elif self.inference_typdde == InferenceType.MAP:
+        elif self.inference_type == InferenceType.MAP:
             estimates = [p.MAP for p in bolfi_results.posteriors]
         else:
             raise NotImplementedError("Error not implemented for {} inference"\
