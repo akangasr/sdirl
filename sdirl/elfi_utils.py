@@ -44,17 +44,27 @@ class InferenceTaskFactory():
         random_state = Environment.get_instance().random_state
         itask = elfi.InferenceTask(seed=random_state.randint(1e7))
         parameters = list()
+        inf_parameters = list()
         for parameter in self.model.parameters:
-            parameters.append(elfi.Prior(parameter.name,
-                                         parameter.prior.distribution_name,
-                                         *parameter.prior.params,
-                                         inference_task=itask))
+            if parameter.bounds[0] > parameter.bounds[1]:
+                raise ValueError("Parameter bounds must be in correct order, received {}".format(parameter.bounds))
+            elif parameter.bounds[0] == parameter.bounds[1]:
+                param = elfi.core.Constant(parameter.name,
+                                           parameter.bounds[0])
+            else:
+                param = elfi.Prior(parameter.name,
+                                   parameter.prior.distribution_name,
+                                   *parameter.prior.params,
+                                   inference_task=itask)
+                inf_parameters.append(param)
+            parameters.append(param)
         if self.model.observation is not None:
             y = self.model.observation
         elif self.model.ground_truth is not None:
             y = self.model.simulator(*self.model.ground_truth, random_state=random_state)
         else:
             raise ValueError("Model should have observation or ground truth")
+        print(parameters)
         Y = elfi.Simulator(self.model.name,
                            vectorize(self.model.simulator),
                            *parameters,
@@ -70,7 +80,7 @@ class InferenceTaskFactory():
                              vectorize(self.model.discrepancy),
                              *summaries,
                              inference_task=itask)
-        itask.parameters = parameters
+        itask.parameters = inf_parameters
         return itask
 
 
