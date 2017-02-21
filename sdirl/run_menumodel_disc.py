@@ -51,8 +51,8 @@ def get_bolfi_params(parameters):
     params.n_surrogate_samples = 50
     params.batch_size = 10
     params.noise_var = 0.5
-    params.kernel_var = 5.0 ** 2  # std = 50% of emp.max
-    params.kernel_scale = 1.2  # 20% of bounds
+    params.kernel_var = 10.0  # 50% of emp.max
+    params.kernel_scale = 0.2  # 20% of smallest bounds
     params.kernel_class = GPy.kern.RBF
     params.gp_params_optimizer = "scg"
     params.gp_params_max_opt_iters = 100
@@ -84,11 +84,37 @@ def run_inference_experiment(parameters, bolfi_params, model, ground_truth=None)
 if __name__ == "__main__":
     env = Environment(sys.argv)
 
-    parameters = [ModelParameter("focus_duration_100ms", bounds=(0,6))]
+    fix_params = (0, 1)
+    #fix_params = (0, 2)
+    #fix_params = (0, 3)
+    #fix_params = (1, 2)
+    #fix_params = (1, 3)
+    #fix_params = (2, 3)
+
+    vals = [("focus_duration_100ms", 2.8, 0, 6, "truncnorm", -3, 3, 3, 1),
+            ("selection_delay_s", 0.29, 0, 1, "truncnorm", -1, 0.7/0.3, 0.3, 0.3),
+            ("menu_recall_probability", 0.69, 0, 1, "truncnorm", -0.69/0.2, (1-0.69)/0.2, 0.69, 0.2),
+            ("p_obs_adjacent", 0.93, 0, 1, "truncnorm", -0.93/0.2, (1-0.93)/0.2, 0.93, 0.2)]
+    parameters = list()
+    inf_parameters = list()
+    for i in range(4):
+        if i in fix_params:
+            bounds = (vals[i][1], vals[i][1])
+            prior = ParameterPrior("uniform", bounds)
+        else:
+            bounds = (vals[i][2], vals[i][3])
+            prior = ParameterPrior(vals[i][4], vals[i][5:])
+        p = ModelParameter(name=vals[i][0], bounds=bounds, prior=prior)
+        if i in fix_params:
+            print("fixed {}".format(p.to_dict()))
+        else:
+            print("infer {}".format(p.to_dict()))
+            inf_parameters.append(p)
+        parameters.append(p)
     ground_truth = None
     observation = None
 
-    bolfi_params = get_bolfi_params(parameters)
+    bolfi_params = get_bolfi_params(inf_parameters)
     bolfi_params.client = env.client
 
     #ground_truth = [4.0]
