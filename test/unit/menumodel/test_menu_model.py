@@ -16,7 +16,7 @@ def simple_model(parameters=None, values=None):
     if parameters is None:
         parameters = [ModelParameter("focus_duration_100ms", bounds=(1,6))]
     if values is None:
-        values = {"focus_duration": 4.0}
+        values = {"focus_duration_100ms": 4.0}
     rl_params = RLParams(
                  n_training_episodes=100000,
                  n_episodes_per_epoch=20,
@@ -30,7 +30,7 @@ def simple_model(parameters=None, values=None):
                  semantic_levels=3,
                  gap_between_items=0.75,
                  prop_target_absent=0.1,
-                 length_observations=False,
+                 length_observations=True,
                  n_training_menus=10000)
     model = msf.get_new_instance(approximate=True)
     model.env.setup(values, np.random.RandomState(0))
@@ -120,14 +120,18 @@ class TestSearchMDP():
         assert task.isFinished() is True
 
     def test_total_duration_of_session_is_logged_correctly(self):
-        env = simple_model().env
+        parameters = [ModelParameter("focus_duration_100ms", bounds=(1,6)),
+                      ModelParameter("selection_delay_s", bounds=(0,1))]
+        values = {"focus_duration_100ms": 2.0,
+                  "selection_delay_s": 0.3}
+        env = simple_model(parameters, values).env
         env.start_logging()
         env.reset()
         env.performAction([int(Action.LOOK_2)])
         env.performAction([int(Action.LOOK_2)])
         env.performAction([int(Action.LOOK_2)])
         env.performAction([int(Action.CLICK)])
-        assert sum(env.log["sessions"][0]["action_duration"]) == 441 + 437 + 437  # assume focus duration 400ms
+        assert sum(env.log["sessions"][0]["action_duration"]) == 241 + 237 + 237 + 300
         env.reset()
         env.performAction([int(Action.QUIT)])
         assert sum(env.log["sessions"][1]["action_duration"]) == 0
@@ -177,6 +181,7 @@ class TestSearchMDP():
         assert env.log["sessions"][0]["path"].transitions[2].action == Action.LOOK_3
         assert env.log["sessions"][0]["path"].transitions[3].action == Action.LOOK_4
 
+    @slow
     def test_target_item_at_equal_probability_at_any_location_or_absent(self):
         env = simple_model().env
         idx = [0,1,2,3,4,5,6,7,None]
@@ -191,6 +196,79 @@ class TestSearchMDP():
         assert sum(locs.values()) == n_reps
         for i in idx:
             assert np.abs(locs[i] - tgt) < 100
+
+    def test_menu_recall_probability_works_correctly(self):
+        parameters = [ModelParameter("focus_duration_100ms", bounds=(1,6)),
+                      ModelParameter("menu_recall_probability", bounds=(0,1))]
+        values = {"focus_duration_100ms": 2.0,
+                  "menu_recall_probability": 0.5}
+        env = simple_model(parameters, values).env
+        env.start_logging()
+        for i in range(1000):
+            env.reset()
+            env.performAction([int(Action.LOOK_2)])
+            env.performAction([int(Action.CLICK)])
+        menus_recalled = 0
+        for i in range(1000):
+            second_state = env.log["sessions"][i]["path"].transitions[0].next_state
+            recall = 1
+            for item in second_state.obs_items:
+                if item.item_relevance == ItemRelevance.NOT_OBSERVED or \
+                   item.item_length == ItemLength.NOT_OBSERVED:
+                       recall = 0
+                       break
+            menus_recalled += recall
+        assert 450 < menus_recalled < 550, menus_recalled
+
+    def test_length_observations_work_correctly(self):
+        env = simple_model().env
+        env.p_obs_len_cur = 0.9
+        env.p_obs_len_adj = 0.5
+        env.start_logging()
+        for i in range(1000):
+            env.reset()
+            env.performAction([int(Action.LOOK_2)])
+            env.performAction([int(Action.CLICK)])
+        prev_length_obs = 0
+        tgt_length_obs = 0
+        next_length_obs = 0
+        for i in range(1000):
+            second_state = env.log["sessions"][i]["path"].transitions[0].next_state
+            if second_state.obs_items[0].item_length != ItemLength.NOT_OBSERVED:
+                prev_length_obs += 1
+            if second_state.obs_items[1].item_length != ItemLength.NOT_OBSERVED:
+                tgt_length_obs += 1
+            if second_state.obs_items[2].item_length != ItemLength.NOT_OBSERVED:
+                next_length_obs += 1
+        assert 450 < prev_length_obs < 550, prev_length_obs
+        assert 450 < next_length_obs < 550, next_length_obs
+        assert 850 < tgt_length_obs < 950, tgt_length_obs
+
+    def test_semantic_neighbor_observations_work_correctly(self):
+        parameters = [ModelParameter("focus_duration_100ms", bounds=(1,6)),
+                      ModelParameter("prob_obs_adjacent", bounds=(0,1))]
+        values = {"focus_duration_100ms": 2.0,
+                  "prob_obs_adjacent": 0.5}
+        env = simple_model(parameters, values).env
+        env.start_logging()
+        for i in range(1000):
+            env.reset()
+            env.performAction([int(Action.LOOK_2)])
+            env.performAction([int(Action.CLICK)])
+        prev_rel_obs = 0
+        tgt_rel_obs = 0
+        next_rel_obs = 0
+        for i in range(1000):
+            second_state = env.log["sessions"][i]["path"].transitions[0].next_state
+            if second_state.obs_items[0].item_relevance != ItemRelevance.NOT_OBSERVED:
+                prev_rel_obs += 1
+            if second_state.obs_items[1].item_relevance != ItemRelevance.NOT_OBSERVED:
+                tgt_rel_obs += 1
+            if second_state.obs_items[2].item_relevance != ItemRelevance.NOT_OBSERVED:
+                next_rel_obs += 1
+        assert 450 < prev_rel_obs < 550, prev_rel_obs
+        assert 450 < next_rel_obs < 550, next_rel_obs
+        assert tgt_rel_obs == 1000, tgt_rel_obs
 
 
 class TestMenuSearchModel():
