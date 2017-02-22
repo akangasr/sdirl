@@ -91,10 +91,15 @@ if __name__ == "__main__":
     #fix_params = (1, 3)
     #fix_params = (2, 3)
 
-    vals = [("focus_duration_100ms", 2.8, 0, 6, "truncnorm", -3, 3, 3, 1),
-            ("selection_delay_s", 0.29, 0, 1, "truncnorm", -1, 0.7/0.3, 0.3, 0.3),
-            ("menu_recall_probability", 0.69, 0, 1, "truncnorm", -0.69/0.2, (1-0.69)/0.2, 0.69, 0.2),
-            ("p_obs_adjacent", 0.93, 0, 1, "truncnorm", -0.93/0.2, (1-0.93)/0.2, 0.93, 0.2)]
+    #vals = [("focus_duration_100ms", 2.8, 0, 6, "truncnorm", -3, 3, 3, 1),
+    #        ("selection_delay_s", 0.29, 0, 1, "truncnorm", -1, 0.7/0.3, 0.3, 0.3),
+    #        ("menu_recall_probability", 0.69, 0, 1, "truncnorm", -0.69/0.2, (1-0.69)/0.2, 0.69, 0.2),
+    #        ("p_obs_adjacent", 0.93, 0, 1, "truncnorm", -0.93/0.2, (1-0.93)/0.2, 0.93, 0.2)]
+    # we want uniform random sampling at start
+    vals = [("focus_duration_100ms", 2.8, 0, 6, "uniform", 0, 6),
+            ("selection_delay_s", 0.29, 0, 1, "uniform", 0, 1),
+            ("menu_recall_probability", 0.69, 0, 1, "uniform", 0, 1),
+            ("p_obs_adjacent", 0.93, 0, 1, "uniform", 0, 1)]
     parameters = list()
     inf_parameters = list()
     for i in range(4):
