@@ -17,7 +17,7 @@ def get_model(parameters, ground_truth, grid_size, approximate, maxlen):
     rl_params = RLParams(
                  n_training_episodes=10000,
                  n_episodes_per_epoch=100,
-                 n_simulation_episodes=100,
+                 n_simulation_episodes=1000,
                  q_alpha=0.1,
                  q_gamma=0.98,
                  exp_epsilon=0.1,
@@ -73,12 +73,12 @@ if __name__ == "__main__":
     env = Environment(sys.argv)
 
     #maxlen = 7
-    maxlen = 8
+    maxlen = 999
 
     parameters = [ModelParameter("feature1_value", bounds=(-0.001, 0))]
     ground_truth = [0.0]
 
-    for grid_size in [3, 5, 7]:
+    for grid_size in [3, 5, 7, 9, 11, 13, 15]:
         obs = None
         for approximate in [True, False]:
             model = get_model(parameters, ground_truth, grid_size, approximate, maxlen)

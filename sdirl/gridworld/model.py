@@ -145,10 +145,11 @@ class GridWorld(SDIRLModel):
             return 1.0
         return 0.0
 
-    def _fill_path_tree(self, obs, full_path_len):
+    def _fill_path_tree(self, obs, full_path_len, policy=None):
         """ Recursively fill path tree starting from obs
 
         Will prune paths that are not feasible:
+         * action not possible according to policy
          * goes through the goal state and not end state
          * full path length is less than max, but no way to reach goal state
            with length that is left in obs
@@ -159,6 +160,9 @@ class GridWorld(SDIRLModel):
                 for transition in self.env.get_transitions(obs.start_state):
                     next_obs = Observation(start_state=transition.next_state,
                                            path_len=obs.path_len-1)
+                    if policy is not None and policy(transition.prev_state, transition.action) == 0:
+                        # impossible action
+                        continue
                     if next_obs.path_len > 0 and next_obs.start_state == self.env.goal_state:
                         # would go through goal state but path does not end there
                         continue
@@ -176,7 +180,7 @@ class GridWorld(SDIRLModel):
                 else:
                     self._paths[obs] = node
                     for transition, next_obs in node:
-                        self._fill_path_tree(next_obs, full_path_len)
+                        self._fill_path_tree(next_obs, full_path_len, policy)
             else:
                 self._paths[obs] = tuple()
 

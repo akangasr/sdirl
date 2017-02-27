@@ -256,7 +256,7 @@ class SDIRLModel(ModelBase):
             start_time2 = time.time()
             n_paths = 0
             prob_i = 0.0
-            paths = self.get_all_paths_for_obs(obs_i)
+            paths = self.get_all_paths_for_obs(obs_i, policy)
             for path in paths:
                 n_paths += 1
                 prob_obs = self._prob_obs(obs_i, path)
@@ -279,18 +279,18 @@ class SDIRLModel(ModelBase):
         logger.info("Logl evaluated in {} seconds".format(duration1))
         return sum(ind_log_obs_probs) / scale
 
-    def _fill_path_tree(self, obs, full_path_len, prune=True):
+    def _fill_path_tree(self, obs, full_path_len, policy, prune=True):
         """ Recursively fill path tree starting from obs
         """
         raise NotImplementedError("Subclass implements")
 
-    def get_all_paths_for_obs(self, obs):
+    def get_all_paths_for_obs(self, obs, policy=None):
         """ Returns a tree containing all possible paths that could have generated
             observation 'obs'.
         """
         self._paths = dict()
         start_time = time.time()
-        self._fill_path_tree(obs, obs.path_len)
+        self._fill_path_tree(obs, obs.path_len, policy)
         end_time = time.time()
         logger.info("Constructing path tree of depth {} took {} seconds"
                 .format(obs.path_len, end_time-start_time))
