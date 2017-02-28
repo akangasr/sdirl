@@ -158,11 +158,11 @@ class GridWorld(SDIRLModel):
             if obs.path_len > 0:
                 node = list()
                 for transition in self.env.get_transitions(obs.start_state):
-                    next_obs = Observation(start_state=transition.next_state,
-                                           path_len=obs.path_len-1)
                     if policy is not None and policy(transition.prev_state, transition.action) == 0:
                         # impossible action
                         continue
+                    next_obs = Observation(start_state=transition.next_state,
+                                           path_len=obs.path_len-1)
                     if next_obs.path_len > 0 and next_obs.start_state == self.env.goal_state:
                         # would go through goal state but path does not end there
                         continue

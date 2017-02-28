@@ -241,6 +241,8 @@ class SDIRLModel(ModelBase):
         return np.atleast_1d([-1 * self.evaluate_loglikelihood(parameters, observations, random_state)])
 
     def evaluate_loglikelihood(self, parameters, observations, random_state, scale=100.0):
+        # Note: scaling != 1.0 will not preserve proportionality of likelihood
+        # (only used as a hack to make GP implementation work, as it breaks with too large values)
         assert len(observations) > 0
         ind_log_obs_probs = list()
         policy = self._get_optimal_policy(parameters, random_state)
@@ -319,13 +321,11 @@ class SDIRLModel(ModelBase):
             state = transition.prev_state
             action = transition.action
             next_state = transition.next_state
-            assert state != self.goal_state  # should have been pruned
             act_i_prob = policy(state, action)
-            if act_i_prob == 0:
-                return 0.0
             tra_i_prob = self.env.transition_prob(transition)
-            if tra_i_prob == 0:
-                return 0.0
+            assert state != self.goal_state, (state, self.goal_state)  # should have been pruned
+            assert act_i_prob != 0, (state, action)  # should have been pruned
+            assert tra_i_prob != 0, (transition)  # should have been pruned
             logp += np.log(act_i_prob) + np.log(tra_i_prob)
         return np.exp(logp)
 

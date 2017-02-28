@@ -21,7 +21,7 @@ class DummyToDictable():
     def to_dict(self):
         return self.contents
 
-def trivial_model(approximate, training_episodes=100):
+def trivial_model(approximate, training_episodes=100, prob_rnd_move=0.0):
     parameters = [ModelParameter("feature1_value", bounds=(-1,0))]
     rl_params = RLParams(
                  n_training_episodes=training_episodes,
@@ -30,7 +30,7 @@ def trivial_model(approximate, training_episodes=100):
     gwf = GridWorldFactory(parameters,
             grid_size=3,
             step_penalty=0.1,
-            prob_rnd_move=0.0,
+            prob_rnd_move=prob_rnd_move,
             world_seed=0,
             rl_params=rl_params,
             observation=DummyToDictable())
@@ -197,7 +197,7 @@ class TestGridWorld():
         rs = np.random.RandomState(1)
         obs = list()
         models = list()
-        model = trivial_model(approximate=False)
+        model = trivial_model(approximate=False, prob_rnd_move=0.01)
         loc = [0.0]
         sim = model.summary_function(model.simulate_observations(*loc, random_state=rs))[0]
         model.discrepancy(([DummyValue(loc, rs)],), ([sim],))
@@ -299,35 +299,41 @@ class TestGridWorld():
         obs = list()
         loc = [[-1, 0, 0, 0], [0, -1, 0, 0], [0, 0, -1, 0]]
         sel_obs = list()
-        model = simple_model(approximate=False, training_episodes=100000,
-                             simulation_episodes=2000000, prob_rnd_move=0.05, use_test_grid=True)
+        models = list()
+        maxpathlen = 14
+        minobs = 500
         for l in loc:
+            model = simple_model(approximate=False, training_episodes=100000,
+                             simulation_episodes=2000000, prob_rnd_move=0.05, use_test_grid=True)
             sim = model.summary_function(model.simulate_observations(*l, random_state=rs))[0]
-            obs.append(sim)
-        common_obs = ObservationDataset(list(set(obs[0].data).intersection(set(obs[1].data)).intersection(set(obs[2].data))))
+            models.append(model)
+            obs.append([d for d in sim.data if d.path_len < maxpathlen])
+        common_obs = list(set(obs[0]).intersection(set(obs[1])).intersection(set(obs[2])))
+        print("initiall {} common paths".format(len(common_obs)))
         for i in range(5):
             while True:
-                so = rs.choice(common_obs.data)
-                if so.path_len < 6:
-                    ep0 = float(sum([so == o for o in obs[0].data]))
-                    ep1 = float(sum([so == o for o in obs[1].data]))
-                    ep2 = float(sum([so == o for o in obs[2].data]))
-                    if ep0 > 500 and ep1 > 500 and ep2 > 500:
-                        break
-                common_obs.data.remove(so)
-                assert len(common_obs.data) > 0
-            print("{} counts: {}, {}, {}".format(so, ep0, ep1, ep2))
+                assert len(common_obs) > 0
+                so = rs.choice(common_obs)
+                common_obs.remove(so)
+                ep0 = float(sum([so == o for o in obs[0]]))
+                ep1 = float(sum([so == o for o in obs[1]]))
+                ep2 = float(sum([so == o for o in obs[2]]))
+                if ep0 > minobs and ep1 > minobs and ep2 > minobs:
+                    break
+            print("obs: {}".format(so))
+            print("empirical counts: 0:{}, 1:{}, 2:{}".format(ep0, ep1, ep2))
             ep01 = ep0 / ep1
             ep02 = ep0 / ep2
             ep12 = ep1 / ep2
-            print("empirical: {}, {}, {}".format(ep01, ep02, ep12))
-            ll0 = model.evaluate_loglikelihood(loc[0], [so], rs)
-            ll1 = model.evaluate_loglikelihood(loc[1], [so], rs)
-            ll2 = model.evaluate_loglikelihood(loc[2], [so], rs)
+            print("empirical ratios: 0/1:{}, 0/2:{}, 1/2:{}".format(ep01, ep02, ep12))
+            ll0 = models[0].evaluate_loglikelihood(loc[0], [so], rs, scale=1.0)
+            ll1 = models[1].evaluate_loglikelihood(loc[1], [so], rs, scale=1.0)
+            ll2 = models[2].evaluate_loglikelihood(loc[2], [so], rs, scale=1.0)
+            print("theoretical logl: 0:{}, 1:{}, 2:{}".format(ll0, ll1, ll2))
             p01 = np.exp(ll0 - ll1)
             p02 = np.exp(ll0 - ll2)
             p12 = np.exp(ll1 - ll2)
-            print("theoretical: {}, {}, {}".format(p01, p02, p12))
+            print("theoretical ratios: 0/1:{}, 0/2:{}, 1/2:{}".format(p01, p02, p12))
             assert np.abs(p01 - ep01) / min([p01, ep01]) < 0.05
             assert np.abs(p02 - ep02) / min([p02, ep02]) < 0.05
             assert np.abs(p12 - ep12) / min([p12, ep12]) < 0.05
