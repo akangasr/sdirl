@@ -84,11 +84,11 @@ def run_inference_experiment(parameters, bolfi_params, model, ground_truth=None)
 if __name__ == "__main__":
     env = Environment(sys.argv)
 
-    fix_params = (0, 1)
+    #fix_params = (0, 1)
     #fix_params = (0, 2)
     #fix_params = (0, 3)
     #fix_params = (1, 2)
-    #fix_params = (1, 3)
+    fix_params = (1, 3)
     #fix_params = (2, 3)
 
     #vals = [("focus_duration_100ms", 2.8, 0, 6, "truncnorm", -3, 3, 3, 1),

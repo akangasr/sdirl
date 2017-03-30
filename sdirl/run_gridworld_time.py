@@ -72,13 +72,12 @@ def run_ground_truth_inference_experiment(parameters, bolfi_params, ground_truth
 if __name__ == "__main__":
     env = Environment(sys.argv)
 
-    #maxlen = 7
     maxlen = 999
 
     parameters = [ModelParameter("feature1_value", bounds=(-0.001, 0))]
     ground_truth = [0.0]
 
-    for grid_size in [3, 5, 7, 9, 11, 13, 15]:
+    for grid_size in [3, 5, 7, 9, 11]:
         obs = None
         for approximate in [True, False]:
             model = get_model(parameters, ground_truth, grid_size, approximate, maxlen)
