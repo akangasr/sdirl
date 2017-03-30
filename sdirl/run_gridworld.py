@@ -13,22 +13,22 @@ from sdirl.rl.simulator import RLParams
 import logging
 logger = logging.getLogger(__name__)
 
-def get_model(parameters, ground_truth, world_seed, approximate, size):
+def get_model(parameters, ground_truth, world_seed, approximate, grid_size, max_sim_episode_len):
     rl_params = RLParams(
                  n_training_episodes=100000,
                  n_episodes_per_epoch=100,
-                 n_simulation_episodes=100,
+                 n_simulation_episodes=1000,
                  q_alpha=0.1,
                  q_gamma=0.98,
                  exp_epsilon=0.1,
                  exp_decay=1.0)
     gwf = GridWorldFactory(parameters,
-            grid_size=size,
+            grid_size=grid_size,
             step_penalty=0.05,
             prob_rnd_move=0.05,
             world_seed=world_seed,
             rl_params=rl_params,
-            max_sim_episode_len=8,
+            max_sim_episode_len=max_sim_episode_len,
             ground_truth=ground_truth,
             initial_state="edge",
             grid_type="walls")
@@ -66,11 +66,22 @@ def run_ground_truth_inference_experiment(parameters, bolfi_params, ground_truth
 if __name__ == "__main__":
     env = Environment(sys.argv)
 
-    n_features = 2
-    #n_features = 3
+    #n_features = 2
+    n_features = 3
     #n_features = 4
-    #size = 5
-    size = 7
+
+    #grid_size = 7
+    #grid_size = 9
+    #grid_size = 13
+    grid_size = 19
+    #grid_size = 23
+    #grid_size = 27
+
+    #max_sim_episode_len = 10  # 1.5*7
+    #max_sim_episode_len = 13  # 1.5*9
+    #cases = [True, False]  # both
+    max_sim_episode_len = 999
+    cases = [True]  # only approx
 
     parameters = list()
     n_samples = 0
@@ -90,8 +101,8 @@ if __name__ == "__main__":
 
     obs = None
 
-    for approximate in [True, False]:
-        model = get_model(parameters, ground_truth, world_seed, approximate, size)
+    for approximate in cases:
+        model = get_model(parameters, ground_truth, world_seed, approximate, grid_size, max_sim_episode_len)
         if obs is None:
             # use same observation for both inferences
             obs = model.simulator(*ground_truth, random_state=env.random_state)[0]
@@ -101,10 +112,26 @@ if __name__ == "__main__":
         bolfi_params.batch_size = batch
         bolfi_params.client = env.client
         if approximate is True:
-            bolfi_params.kernel_var = 1.5
-            bolfi_params.noise_var = 0.15  # 10%, quite noisy
+            if grid_size == 7:
+                var = 2.0  # ~50% of emp max diff
+            elif grid_size == 9:
+                var = 3.0  # ~50% of emp max diff
+            elif grid_size == 13:
+                var = 7.5  # ~50% of emp max diff
+            elif grid_size == 19:
+                var = 20.0  # ~50% of emp max diff
+            elif grid_size == 23:
+                var = 20.0  # ~50% of emp max diff
+            elif grid_size == 27:
+                var = 20.0  # ~50% of emp max diff
+            bolfi_params.kernel_var = var
+            bolfi_params.noise_var = var / 10.0  # 10%, quite noisy
         else:
-            bolfi_params.kernel_var = 1.5
-            bolfi_params.noise_var = 0.015  # 1%, should be quite accurate
+            if grid_size == 7:
+                var = 20.0  # ~50% of emp max diff
+            if grid_size == 9:
+                var = 25.0  # ~50% of emp max diff
+            bolfi_params.kernel_var = var
+            bolfi_params.noise_var = var / 100.0  # 1%, should be quite accurate
 
         run_ground_truth_inference_experiment(parameters, bolfi_params, ground_truth, model, approximate)

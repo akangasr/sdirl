@@ -44,7 +44,7 @@ def get_bolfi_params(parameters):
     params.gp_params_max_opt_iters = 100
     params.exploration_rate = 1.0
     params.acq_opt_iterations = 1000
-    params.batches_of_init_samples = 4  # 20% of samples
+    params.batches_of_init_samples = 2  # 20% of samples
     params.inference_type = InferenceType.ML
     params.use_store = True
     return params
@@ -69,9 +69,9 @@ if __name__ == "__main__":
     n_features = 2
     #n_features = 3
     #n_features = 4
-    grid_size = 9
+    #grid_size = 9
     #grid_size = 13
-    #grid_size = 19
+    grid_size = 19
     #grid_size = 23
     #grid_size = 29
 
