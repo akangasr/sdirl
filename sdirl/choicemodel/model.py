@@ -216,12 +216,12 @@ class ChoiceModel(SDIRLModel):
 
     def plot_table(self, table, ax):
         ax.axis("off")
-        ax.table(cellText=[["{:.2f}".format(table["AA"]),
-                            "{:.2f}".format(table["BA"])],
-                           ["{:.2f}".format(table["AB"]),
-                            "{:.2f}".format(table["BB"])],
-                           ["decoy {:.2f}".format(table["D"]),
-                            "none {:.2f}".format(table["X"])],
+        ax.table(cellText=[["stable A {:.2f} %".format(table["AA"]),
+                            "inv.rev. {:.2f} %".format(table["BA"])],
+                           ["reversal {:.2f} %".format(table["AB"]),
+                            "stable B {:.2f} %".format(table["BB"])],
+                           ["decoy {:.2f} %".format(table["D"]),
+                            "none {:.2f} %".format(table["X"])],
                           ],
                  rowLabels=["B decoy -> chose A  ", "B decoy -> chose B  ", "other"],
                  colLabels=["A decoy -> chose A", "A decoy -> chose B"],

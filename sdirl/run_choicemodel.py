@@ -43,7 +43,7 @@ def get_model(parameters, ground_truth=None, observation=None):
                  observation=observation)
     return cmf.get_new_instance(approximate=True)
 
-def get_bolfi_params(parameters, scale, var):
+def get_bolfi_params(parameters):
     params = BolfiParams()
     params.bounds = tuple([p.bounds for p in parameters])
     params.sync = True
@@ -83,22 +83,24 @@ def run_inference_experiment(parameters, bolfi_params, model, ground_truth=None)
 if __name__ == "__main__":
     env = Environment(sys.argv)
 
-    fix_params = (   1, 2, 3, 4, 5)
-    #fix_params = (0,    2, 3, 4, 5)
-    #fix_params = (0, 1,    3, 4, 5)
-    #fix_params = (0, 1, 2,    4, 5)
-    #fix_params = (0, 1, 2, 3,    5)
-    #fix_params = (0, 1, 2, 3, 4   )
+    fix_params = (   1, 2, 3, 4, 5, 6)
+    #fix_params = (0,    2, 3, 4, 5, 6)
+    #fix_params = (0, 1,    3, 4, 5, 6)
+    #fix_params = (0, 1, 2,    4, 5, 6)
+    #fix_params = (0, 1, 2, 3,    5, 6)
+    #fix_params = (0, 1, 2, 3, 4,    6)
+    #fix_params = (0, 1, 2, 3, 4, 5   )
 
     vals = [("alpha", 1.5, 0.1, 1.9, "uniform", 0.1, 1.9),
             ("calc_sigma", 0.35, 0.01, 5.0, "uniform", 0.01, 5.0),
             ("tau_p", 0.011, 0.001, 0.5, "uniform", 0.001, 0.5),
             ("tau_v", 1.1, 0.1, 5.0, "uniform", 0.1, 5.0),
-            ("tau_u", 2.0, 0.1, 5.0, "uniform", 0.1, 5.0),
+            ("tau_r", 2.0, 0.1, 5.0, "uniform", 0.1, 5.0),
+            ("f_err", 0.1, 0.01, 0.5, "uniform", 0.01, 0.5),
             ("step_penalty", -1.0, -2.0, 0.0, "uniform", -2.0, 0.0)]
     parameters = list()
     inf_parameters = list()
-    for i in range(6):
+    for i in range(7):
         if i in fix_params:
             bounds = (vals[i][1], vals[i][1])
             prior = ParameterPrior("uniform", bounds)

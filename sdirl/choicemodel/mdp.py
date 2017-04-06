@@ -73,12 +73,12 @@ class ChoiceTask(ParametricLoggingEpisodicTask):
 
     def __init__(self, env, step_penalty, max_number_of_actions_per_session):
         super(ChoiceTask, self).__init__(env)
-        self.step_penalty = step_penalty
+        #self.step_penalty = step_penalty
         self.max_number_of_actions_per_session = max_number_of_actions_per_session
 
     def to_dict(self):
         return {
-                "step_penalty": self.step_penalty,
+                "ABC_params": self.v,
                 "max_number_of_actions_per_session": self.max_number_of_actions_per_session,
                 }
 
@@ -94,7 +94,7 @@ class ChoiceTask(ParametricLoggingEpisodicTask):
             return self.env.draw_option_value(2)
         if self.env.state != self.env.prev_state:
             return 0.0  # acquired new information
-        return self.step_penalty
+        return self.v["step_penalty"]
 
     def isFinished(self):
         """ Returns true when the task is in end state """
@@ -149,13 +149,13 @@ class ChoiceEnvironment(ParametricLoggingEnvironment):
         self.v_loc = v_loc
         self.v_scale = v_scale
         self.v_df = v_df
-        self.alpha = alpha
-        self.calc_sigma = calc_sigma
-        self.tau_p = tau_p
-        self.tau_v = tau_v
-        self.f_err = f_err
+        #self.alpha = alpha
+        #self.calc_sigma = calc_sigma
+        #self.tau_p = tau_p
+        #self.tau_v = tau_v
+        #self.f_err = f_err
         self.u_fun = u_fun
-        self.tau_r = 2.0  # temp
+        #self.tau_r = 2.0  # temp
         self.n_training_sets = n_training_sets
         assert self.n_options == 3
 
@@ -182,11 +182,7 @@ class ChoiceEnvironment(ParametricLoggingEnvironment):
                 "v_loc": self.v_loc,
                 "v_scale": self.v_scale,
                 "v_df": self.v_df,
-                "alpha": self.alpha,
-                "calc_sigma": self.calc_sigma,
-                "tau_v": self.tau_v,
-                "tau_p": self.tau_p,
-                "f_err": self.f_err,
+                "ABC_params": self.v,
                 "n_training_sets": self.n_training_sets,
                 }
 
@@ -276,10 +272,10 @@ class ChoiceEnvironment(ParametricLoggingEnvironment):
         if state.option_values[index] != OptionValue.NOT_OBSERVED:
             # re-observing does not change previous estimate
             return state
-        p = self.options[index].p ** self.alpha
+        p = self.options[index].p ** self.v["alpha"]
         v = self.options[index].v
         u = self.u_fun(v)
-        m = p * u + self.random_state.normal(0, self.calc_sigma)
+        m = p * u + self.random_state.normal(0, self.v["calc_sigma"])
         if m > 0:
             state.option_values[index] = OptionValue.ACCEPTABLE
         else:
@@ -298,7 +294,7 @@ class ChoiceEnvironment(ParametricLoggingEnvironment):
             if kind == "p":
                 f1 = self.options[i1].p
                 f2 = self.options[i2].p
-                tau = self.tau_p
+                tau = self.v["tau_p"]
                 if i1 == 0 and i2 == 1:
                     idx = 0
                 if i1 == 0 and i2 == 2:
@@ -308,7 +304,7 @@ class ChoiceEnvironment(ParametricLoggingEnvironment):
             if kind == "v":
                 f1 = self.options[index1].v
                 f2 = self.options[index2].v
-                tau = self.tau_v
+                tau = self.v["tau_v"]
                 if i1 == 0 and i2 == 1:
                     idx = 3
                 if i1 == 0 and i2 == 2:
@@ -316,15 +312,15 @@ class ChoiceEnvironment(ParametricLoggingEnvironment):
                 if i1 == 1 and i2 == 2:
                     idx = 5
             if kind == "r":
-                p1 = self.options[i1].p ** self.alpha
+                p1 = self.options[i1].p ** self.v["alpha"]
                 v1 = self.options[i1].v
                 u1 = self.u_fun(v1)
-                f1 = p1 * u1 + self.random_state.normal(0, self.calc_sigma)
-                p2 = self.options[i2].p ** self.alpha
+                f1 = p1 * u1 + self.random_state.normal(0, self.v["calc_sigma"])
+                p2 = self.options[i2].p ** self.v["alpha"]
                 v2 = self.options[i2].v
                 u2 = self.u_fun(v2)
-                f2 = p2 * u2 + self.random_state.normal(0, self.calc_sigma)
-                tau = self.tau_r
+                f2 = p2 * u2 + self.random_state.normal(0, self.v["calc_sigma"])
+                tau = self.v["tau_r"]
                 if i1 == 0 and i2 == 1:
                     idx = 6
                 if i1 == 0 and i2 == 2:
@@ -338,7 +334,7 @@ class ChoiceEnvironment(ParametricLoggingEnvironment):
                     state.option_comparisons[idx] = OptionComparison.EQUAL_TO
                 else:
                     state.option_comparisons[idx] = OptionComparison.MORE_THAN
-                if self.random_state.rand() < self.f_err:
+                if self.random_state.rand() < self.v["f_err"]:
                     state.option_comparisons[idx] = self.random_state.choice(
                             [OptionComparison.LESS_THAN,
                              OptionComparison.EQUAL_TO,
