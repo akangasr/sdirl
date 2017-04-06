@@ -10,26 +10,27 @@ import logging
 logger = logging.getLogger(__name__)
 
 class Observation():
-    def __init__(self, pair_index, decoy_target, decoy_type, last_action):
+    def __init__(self, pair_index, decoy_target, decoy_type, last_action, duration):
         self.pair_index = pair_index
         self.decoy_target = decoy_target
         self.decoy_type = decoy_type
         self.last_action = last_action
+        self.duration = duration
 
     def __eq__(a, b):
         return a.__hash__() == b.__hash__()
 
     def __hash__(self):
-        return (self.pair_index, self.decoy_target, self.decoy_type, self.last_action).__hash__()
+        return (self.pair_index, self.decoy_target, self.decoy_type, self.last_action, self.duration).__hash__()
 
     def __repr__(self):
-        return "O({},{},{},{})".format(self.pair_index, self.decoy_target, self.decoy_type, self.last_action)
+        return "O({},{},{},{})".format(self.pair_index, self.decoy_target, self.decoy_type, self.last_action, self.duration)
 
     def __str__(self):
         return self.__repr__()
 
     def copy(self):
-        return Observation(self.pair_index, self.decoy_target, self.decoy_type, self.last_action)
+        return Observation(self.pair_index, self.decoy_target, self.decoy_type, self.last_action, self.duration)
 
 
 class ChoiceModelFactory(SDIRLModelFactory):
@@ -89,10 +90,44 @@ class ChoiceModel(SDIRLModel):
     """ Choice model.
     """
     def summary_function(self, obs):
+        if obs[0].name is "Wedell":
+            return obs
         return np.atleast_1d(ObservationDataset([
-                Observation(ses["pair_index"], ses["decoy_target"], ses["decoy_type"], ses["action"][-1])
+                Observation(ses["pair_index"], ses["decoy_target"], ses["decoy_type"], ses["action"][-1], len(ses["action"]))
                 for ses in obs[0].data["sessions"]
             ], name="summary"))
+
+    @staticmethod
+    def get_observation_dataset():
+        """ Returns the Wedell dataset as an observation.
+        """
+        data = {"R": {
+                "AA": 53.4,
+                "AB": 20.3,
+                "BA": 5.3,
+                "BB": 19.0,
+                "D": 2.0,
+                "X": 0
+                },
+                "F": {
+                "AA": 47.8,
+                "AB": 22.2,
+                "BA": 8.0,
+                "BB": 20.0,
+                "D": 2.0,
+                "X": 0
+                },
+                "RF": {
+                "AA": 55.5,
+                "AB": 17.0,
+                "BA": 5.7,
+                "BB": 19.8,
+                "D": 2.0,
+                "X": 0
+                },
+                }
+
+        return ObservationDataset(data, name="Wedell")
 
     def calculate_discrepancy(self, observations, sim_observations):
         R_table_obs = self._get_table("R", observations)
@@ -110,6 +145,9 @@ class ChoiceModel(SDIRLModel):
 
     def _get_table(self, decoy_type, observation):
         obs = observation[0][0].data
+        if observation[0][0].name == "Wedell":
+            print("obs", decoy_type, obs[decoy_type])
+            return obs[decoy_type]
         table = {
                 "AA": 0,
                 "AB": 0,
@@ -118,7 +156,9 @@ class ChoiceModel(SDIRLModel):
                 "D": 0,
                 "X": 0
                 }
-        for index in range(60):  # assume wedell pairs
+        durations = list()
+        n = 0
+        for index in range(10):  # assume wedell pairs
             context_A = list()
             context_B = list()
             for o in obs:
@@ -129,6 +169,8 @@ class ChoiceModel(SDIRLModel):
                         context_B.append(o.last_action)
                     else:
                         assert False
+                    durations.append(o.duration)
+            assert len(context_A) > 0
             assert len(context_A) == len(context_B)
             # if more than one pair, match in order of execution
             for a, b in zip(context_A, context_B):
@@ -145,6 +187,10 @@ class ChoiceModel(SDIRLModel):
                 else:
                     logger.warning("End actions were {} and {}".format(a, b))
                     table["X"] += 1 # timeout?
+                n += 1
+        for k, v in table.items():
+            table[k] = v * 100 / float(n)
+        print("sim", decoy_type, table, np.mean(durations))
         return table
 
     def _table_discrepancy(self, table1, table2):
@@ -156,11 +202,11 @@ class ChoiceModel(SDIRLModel):
         return d
 
     def plot_obs(self, obs):
-        assert isinstance(obs, ObservationDataset), type(obs)
-        R_table = self._get_table("R", obs)
-        F_table = self._get_table("F", obs)
-        RF_table = self._get_table("RF", obs)
-        f, (ax1, ax2, ax3) = plt.subplots(1, 3)
+        obs = self.summary_function([obs])
+        R_table = self._get_table("R", [obs])
+        F_table = self._get_table("F", [obs])
+        RF_table = self._get_table("RF", [obs])
+        f, (ax1, ax2, ax3) = pl.subplots(3, 1)
         self.plot_table(R_table, ax1)
         ax1.set_title("Range decoy")
         self.plot_table(F_table, ax2)
@@ -169,7 +215,15 @@ class ChoiceModel(SDIRLModel):
         ax3.set_title("Range-frequency decoy")
 
     def plot_table(self, table, ax):
-        ax.table(cellText=[[table["AA"], table["BA"]], [table["AB"], table["BB"]]],
-                 rowLabels=["chose A", "chose B"],
-                 colLabels=["chose A", "chose B"])
+        ax.axis("off")
+        ax.table(cellText=[["{:.2f}".format(table["AA"]),
+                            "{:.2f}".format(table["BA"])],
+                           ["{:.2f}".format(table["AB"]),
+                            "{:.2f}".format(table["BB"])],
+                           ["decoy {:.2f}".format(table["D"]),
+                            "none {:.2f}".format(table["X"])],
+                          ],
+                 rowLabels=["B decoy -> chose A  ", "B decoy -> chose B  ", "other"],
+                 colLabels=["A decoy -> chose A", "A decoy -> chose B"],
+                 bbox=[0.2, 0.2, 0.90, 0.7])
 

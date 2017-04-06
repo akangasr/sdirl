@@ -15,13 +15,13 @@ logger = logging.getLogger(__name__)
 
 def get_model(parameters, ground_truth=None, observation=None):
     rl_params = RLParams(
-                 n_training_episodes=100000,
-                 n_episodes_per_epoch=100,
-                 n_simulation_episodes=600,
-                 q_alpha=0.1,
-                 q_gamma=0.98,
-                 exp_epsilon=0.1,
-                 exp_decay=1.0)
+                 n_training_episodes=10000000,
+                 n_episodes_per_epoch=1000,
+                 n_simulation_episodes=1800,
+                 q_alpha=0.01,
+                 q_gamma=1.0,
+                 exp_epsilon=1.0,
+                 exp_decay=0.999999)
     cmf = ChoiceModelFactory(
                  parameters,
                  n_options=3,
@@ -35,9 +35,9 @@ def get_model(parameters, ground_truth=None, observation=None):
                  tau_p=0.011,
                  tau_v=1.1,
                  f_err=0.1,
-                 n_training_sets=10000,
+                 n_training_sets=50000,
                  max_number_of_actions_per_session=20,
-                 step_penalty=-0.1,
+                 step_penalty=-1.0,
                  rl_params=rl_params,
                  ground_truth=ground_truth,
                  observation=observation)
@@ -47,7 +47,7 @@ def get_bolfi_params(parameters):
     params = BolfiParams()
     params.bounds = tuple([p.bounds for p in parameters])
     params.sync = True
-    params.n_surrogate_samples = 1
+    params.n_surrogate_samples = 3
     params.batch_size = 1
     params.noise_var = 0.5
     params.kernel_var = 10.0  # 50% of emp.max
@@ -59,7 +59,7 @@ def get_bolfi_params(parameters):
     params.acq_opt_iterations = 1000
     params.batches_of_init_samples = 1  # 20%
     params.inference_type = InferenceType.ML
-    params.use_store = True  # False  # because of discerror measure
+    params.use_store = False  # because of discerror measure
     return params
 
 def run_inference_experiment(parameters, bolfi_params, model, ground_truth=None):
@@ -94,7 +94,8 @@ if __name__ == "__main__":
     bolfi_params = get_bolfi_params(parameters)
     bolfi_params.client = env.client
 
-    ground_truth = [0.5]
+    #ground_truth = [0.5]
+    observation = ChoiceModel.get_observation_dataset()
 
     model = get_model(parameters, ground_truth=ground_truth, observation=observation)
     run_inference_experiment(parameters, bolfi_params, model, ground_truth)

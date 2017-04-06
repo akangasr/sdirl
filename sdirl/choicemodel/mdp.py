@@ -44,18 +44,10 @@ class State():
     def copy(self):
         return State(self.option_values[:], self.option_comparisons[:], self.select)
 
-class OptionValue(IntEnum):  # discretized real values
+class OptionValue(IntEnum):
     NOT_OBSERVED = 0
-    V1 = 1
-    V2 = 2
-    V3 = 3
-    V4 = 4
-    V5 = 5
-    V6 = 6
-    V7 = 7
-    V8 = 8
-    V9 = 9
-    V10 = 10
+    ACCEPTABLE = 1
+    NOT_ACCEPTABLE = 2
 
 class OptionComparison(IntEnum):
     NOT_OBSERVED = 0
@@ -66,23 +58,16 @@ class OptionComparison(IntEnum):
 class Select(IntEnum):
     NOT_SELECTED = 0
     HAS_SELECTED_1 = 1
-    HAS_SELECTED_2 = 1
-    HAS_SELECTED_3 = 1
+    HAS_SELECTED_2 = 2
+    HAS_SELECTED_3 = 3
 
 class Action(IntEnum):
-    CALCULATE_1 = 0
-    CALCULATE_2 = 1
-    CALCULATE_3 = 2
-    COMPARE_12_1 = 3
-    COMPARE_12_2 = 4
-    COMPARE_13_1 = 5
-    COMPARE_13_2 = 6
-    COMPARE_23_1 = 7
-    COMPARE_23_2 = 8
-    SELECT_1 = 9
-    SELECT_2 = 10
-    SELECT_3 = 11
-
+    OBSERVE_1 = 0
+    OBSERVE_2 = 1
+    OBSERVE_3 = 2
+    SELECT_1 = 3
+    SELECT_2 = 4
+    SELECT_3 = 5
 
 class ChoiceTask(ParametricLoggingEpisodicTask):
 
@@ -107,6 +92,8 @@ class ChoiceTask(ParametricLoggingEpisodicTask):
             return self.env.draw_option_value(1)
         if self.env.state.select == Select.HAS_SELECTED_3:
             return self.env.draw_option_value(2)
+        if self.env.state != self.env.prev_state:
+            return 0.0  # acquired new information
         return self.step_penalty
 
     def isFinished(self):
@@ -128,6 +115,9 @@ class Option():
         if random_state.rand() < self.p:
             return self.v
         return 0.0
+
+    def expected_value(self):
+        return self.p * self.v
 
 def identity(v):
     return v
@@ -165,6 +155,7 @@ class ChoiceEnvironment(ParametricLoggingEnvironment):
         self.tau_v = tau_v
         self.f_err = f_err
         self.u_fun = u_fun
+        self.tau_r = 2.0  # temp
         self.n_training_sets = n_training_sets
         assert self.n_options == 3
 
@@ -181,7 +172,7 @@ class ChoiceEnvironment(ParametricLoggingEnvironment):
         self.outdim = 1
         self.indim = 1
         self.discreteActions = True
-        self.numActions = 12
+        self.numActions = 6
 
     def to_dict(self):
         return {
@@ -200,7 +191,8 @@ class ChoiceEnvironment(ParametricLoggingEnvironment):
                 }
 
     def draw_option_value(self, index):
-        return self.options[index].draw_value(self.random_state)
+        baseline_value = float(np.mean([c.expected_value() for c in self.options]))
+        return self.options[index].expected_value() - baseline_value
 
     def _get_options(self):
         if self.training is False:
@@ -259,7 +251,7 @@ class ChoiceEnvironment(ParametricLoggingEnvironment):
 
         # state observed by agent
         self.state = State([OptionValue.NOT_OBSERVED]*3,
-                           [OptionComparison.NOT_OBSERVED]*6,
+                           [OptionComparison.NOT_OBSERVED]*9,
                            Select.NOT_SELECTED)
         self.prev_state = self.state.copy()
 
@@ -267,6 +259,8 @@ class ChoiceEnvironment(ParametricLoggingEnvironment):
         self.action = None
         self.n_actions = 0
         self._start_log_for_new_session()
+        #if not self.training:
+        #    print(self.state)
 
     def performAction(self, action):
         self.action = Action(int(action[0]))
@@ -274,68 +268,81 @@ class ChoiceEnvironment(ParametricLoggingEnvironment):
         self.state = self.do_transition(self.state, self.action)
         self.n_actions += 1
         self._log_transition()
+        #if not self.training:
+        #    print(self.action)
+        #    print(self.state)
 
     def _calculate(self, state, index):
-        p = self.options[index].p
+        if state.option_values[index] != OptionValue.NOT_OBSERVED:
+            # re-observing does not change previous estimate
+            return state
+        p = self.options[index].p ** self.alpha
         v = self.options[index].v
         u = self.u_fun(v)
-        m = (p ** self.alpha) * u + self.random_state.normal(0, self.calc_sigma)
-        # TODO: better discretization
-        if m > self.v_loc + 2.0*self.v_scale:
-            state.option_values[index] = OptionValue.V10
-        elif m > self.v_loc + 1.5*self.v_scale:
-            state.option_values[index] = OptionValue.V9
-        elif m > self.v_loc + 1.0*self.v_scale:
-            state.option_values[index] = OptionValue.V8
-        elif m > self.v_loc + 0.5*self.v_scale:
-            state.option_values[index] = OptionValue.V7
-        elif m > self.v_loc:
-            state.option_values[index] = OptionValue.V6
-        elif m > self.v_loc - 0.5*self.v_scale:
-            state.option_values[index] = OptionValue.V5
-        elif m > self.v_loc - 1.0*self.v_scale:
-            state.option_values[index] = OptionValue.V4
-        elif m > self.v_loc - 1.5*self.v_scale:
-            state.option_values[index] = OptionValue.V3
-        elif m > self.v_loc - 2.0*self.v_scale:
-            state.option_values[index] = OptionValue.V2
+        m = p * u + self.random_state.normal(0, self.calc_sigma)
+        if m > 0:
+            state.option_values[index] = OptionValue.ACCEPTABLE
         else:
-            state.option_values[index] = OptionValue.V1
+            state.option_values[index] = OptionValue.NOT_ACCEPTABLE
         return state
 
-    def _compare(self, state, index1, index2, kind):
+    def _compare(self, state, index1, index2):
+        if state.option_values[index1] == OptionValue.NOT_OBSERVED or \
+           state.option_values[index2] == OptionValue.NOT_OBSERVED:
+            # can not compare before observing first
+            return state
         assert index1 != index2, index1
         i1 = min(index1, index2)
         i2 = max(index1, index2)
-        if kind == "p":
-            f1 = self.options[i1].p
-            f2 = self.options[i2].p
-            tau = self.tau_p
-            if i1 == 0 and i2 == 1:
-                idx = 0
-            if i1 == 0 and i2 == 2:
-                idx = 1
-            if i1 == 1 and i2 == 2:
-                idx = 2
-        else:
-            f1 = self.options[index1].v
-            f2 = self.options[index2].v
-            tau = self.tau_v
-            if i1 == 0 and i2 == 1:
-                idx = 3
-            if i1 == 0 and i2 == 2:
-                idx = 4
-            if i1 == 1 and i2 == 2:
-                idx = 5
-        if f1 < f2 - tau:
-            state.option_comparisons[idx] = OptionComparison.LESS_THAN
-        elif f1 < f2 + tau:
-            state.option_comparisons[idx] = OptionComparison.EQUAL_TO
-        else:
-            state.option_comparisons[idx] = OptionComparison.MORE_THAN
-        if self.random_state.rand() < self.f_err:
-            state.option_comparisons[idx] = self.random_state.choice(
-                    [OptionComparison.LESS_THAN, OptionComparison.EQUAL_TO, OptionComparison.MORE_THAN])
+        for kind in ["r", "p", "v"]:
+            if kind == "p":
+                f1 = self.options[i1].p
+                f2 = self.options[i2].p
+                tau = self.tau_p
+                if i1 == 0 and i2 == 1:
+                    idx = 0
+                if i1 == 0 and i2 == 2:
+                    idx = 1
+                if i1 == 1 and i2 == 2:
+                    idx = 2
+            if kind == "v":
+                f1 = self.options[index1].v
+                f2 = self.options[index2].v
+                tau = self.tau_v
+                if i1 == 0 and i2 == 1:
+                    idx = 3
+                if i1 == 0 and i2 == 2:
+                    idx = 4
+                if i1 == 1 and i2 == 2:
+                    idx = 5
+            if kind == "r":
+                p1 = self.options[i1].p ** self.alpha
+                v1 = self.options[i1].v
+                u1 = self.u_fun(v1)
+                f1 = p1 * u1 + self.random_state.normal(0, self.calc_sigma)
+                p2 = self.options[i2].p ** self.alpha
+                v2 = self.options[i2].v
+                u2 = self.u_fun(v2)
+                f2 = p2 * u2 + self.random_state.normal(0, self.calc_sigma)
+                tau = self.tau_r
+                if i1 == 0 and i2 == 1:
+                    idx = 6
+                if i1 == 0 and i2 == 2:
+                    idx = 7
+                if i1 == 1 and i2 == 2:
+                    idx = 8
+            if state.option_comparisons[idx] == OptionComparison.NOT_OBSERVED:
+                if f1 < f2 - tau:
+                    state.option_comparisons[idx] = OptionComparison.LESS_THAN
+                elif f1 < f2 + tau:
+                    state.option_comparisons[idx] = OptionComparison.EQUAL_TO
+                else:
+                    state.option_comparisons[idx] = OptionComparison.MORE_THAN
+                if self.random_state.rand() < self.f_err:
+                    state.option_comparisons[idx] = self.random_state.choice(
+                            [OptionComparison.LESS_THAN,
+                             OptionComparison.EQUAL_TO,
+                             OptionComparison.MORE_THAN])
         return state
 
     def do_transition(self, state, action):
@@ -353,32 +360,33 @@ class ChoiceEnvironment(ParametricLoggingEnvironment):
         """
         state = state.copy()
 
-        if action == Action.CALCULATE_1:
+        if action == Action.OBSERVE_1:
             state = self._calculate(state, 0)
-        elif action == Action.CALCULATE_2:
+        elif action == Action.OBSERVE_2:
             state = self._calculate(state, 1)
-        elif action == Action.CALCULATE_3:
+        elif action == Action.OBSERVE_3:
             state = self._calculate(state, 2)
-        elif action == Action.COMPARE_12_1:
-            state = self._compare(state, 0, 1, "p")
-        elif action == Action.COMPARE_12_2:
-            state = self._compare(state, 0, 1, "v")
-        elif action == Action.COMPARE_13_1:
-            state = self._compare(state, 0, 2, "p")
-        elif action == Action.COMPARE_13_2:
-            state = self._compare(state, 0, 2, "v")
-        elif action == Action.COMPARE_23_1:
-            state = self._compare(state, 1, 2, "p")
-        elif action == Action.COMPARE_23_2:
-            state = self._compare(state, 1, 2, "v")
         elif action == Action.SELECT_1:
-            state.select = Select.HAS_SELECTED_1
+            if state.option_values[0] != OptionValue.NOT_OBSERVED:
+                state.select = Select.HAS_SELECTED_1
         elif action == Action.SELECT_2:
-            state.select = Select.HAS_SELECTED_2
+            if state.option_values[1] != OptionValue.NOT_OBSERVED:
+                state.select = Select.HAS_SELECTED_2
         elif action == Action.SELECT_3:
-            state.select = Select.HAS_SELECTED_3
+            if state.option_values[2] != OptionValue.NOT_OBSERVED:
+                state.select = Select.HAS_SELECTED_3
         else:
             raise ValueError("Unknown action: {}".format(action))
+
+        if state.option_values[0] != OptionValue.NOT_OBSERVED and \
+           state.option_values[1] != OptionValue.NOT_OBSERVED:
+            state = self._compare(state, 0, 1)
+        if state.option_values[0] != OptionValue.NOT_OBSERVED and \
+           state.option_values[2] != OptionValue.NOT_OBSERVED:
+            state = self._compare(state, 0, 2)
+        if state.option_values[1] != OptionValue.NOT_OBSERVED and \
+           state.option_values[2] != OptionValue.NOT_OBSERVED:
+            state = self._compare(state, 1, 2)
 
         return state
 
