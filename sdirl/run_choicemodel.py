@@ -43,15 +43,15 @@ def get_model(parameters, ground_truth=None, observation=None):
                  observation=observation)
     return cmf.get_new_instance(approximate=True)
 
-def get_bolfi_params(parameters):
+def get_bolfi_params(parameters, scale, var):
     params = BolfiParams()
     params.bounds = tuple([p.bounds for p in parameters])
     params.sync = True
-    params.n_surrogate_samples = 3
-    params.batch_size = 1
+    params.n_surrogate_samples = 10
+    params.batch_size = 2
     params.noise_var = 0.5
-    params.kernel_var = 10.0  # 50% of emp.max
-    params.kernel_scale = 0.2  # 20% of smallest bounds
+    params.kernel_var = 2.00  # 50% of emp.max
+    params.kernel_scale = 0.1  # 20% of smallest bounds
     params.kernel_class = GPy.kern.RBF
     params.gp_params_optimizer = "scg"
     params.gp_params_max_opt_iters = 100
@@ -83,15 +83,39 @@ def run_inference_experiment(parameters, bolfi_params, model, ground_truth=None)
 if __name__ == "__main__":
     env = Environment(sys.argv)
 
+    fix_params = (   1, 2, 3, 4, 5)
+    #fix_params = (0,    2, 3, 4, 5)
+    #fix_params = (0, 1,    3, 4, 5)
+    #fix_params = (0, 1, 2,    4, 5)
+    #fix_params = (0, 1, 2, 3,    5)
+    #fix_params = (0, 1, 2, 3, 4   )
+
+    vals = [("alpha", 1.5, 0.1, 1.9, "uniform", 0.1, 1.9),
+            ("calc_sigma", 0.35, 0.01, 5.0, "uniform", 0.01, 5.0),
+            ("tau_p", 0.011, 0.001, 0.5, "uniform", 0.001, 0.5),
+            ("tau_v", 1.1, 0.1, 5.0, "uniform", 0.1, 5.0),
+            ("tau_u", 2.0, 0.1, 5.0, "uniform", 0.1, 5.0),
+            ("step_penalty", -1.0, -2.0, 0.0, "uniform", -2.0, 0.0)]
     parameters = list()
-    bounds = (0, 1)
-    prior = ParameterPrior("uniform", bounds)
-    p = ModelParameter(name="none", bounds=bounds, prior=prior)
-    parameters.append(p)
+    inf_parameters = list()
+    for i in range(6):
+        if i in fix_params:
+            bounds = (vals[i][1], vals[i][1])
+            prior = ParameterPrior("uniform", bounds)
+        else:
+            bounds = (vals[i][2], vals[i][3])
+            prior = ParameterPrior(vals[i][4], vals[i][5:])
+        p = ModelParameter(name=vals[i][0], bounds=bounds, prior=prior)
+        if i in fix_params:
+            print("fixed {}".format(p.to_dict()))
+        else:
+            print("infer {}".format(p.to_dict()))
+            inf_parameters.append(p)
+        parameters.append(p)
     ground_truth = None
     observation = None
 
-    bolfi_params = get_bolfi_params(parameters)
+    bolfi_params = get_bolfi_params(inf_parameters)
     bolfi_params.client = env.client
 
     #ground_truth = [0.5]
