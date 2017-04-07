@@ -46,8 +46,9 @@ class State():
 
 class OptionValue(IntEnum):
     NOT_OBSERVED = 0
-    ACCEPTABLE = 1
-    NOT_ACCEPTABLE = 2
+    ABOVE_AVERAGE = 1
+    AVERAGE = 2
+    BELOW_AVERAGE = 3
 
 class OptionComparison(IntEnum):
     NOT_OBSERVED = 0
@@ -71,9 +72,8 @@ class Action(IntEnum):
 
 class ChoiceTask(ParametricLoggingEpisodicTask):
 
-    def __init__(self, env, step_penalty, max_number_of_actions_per_session):
+    def __init__(self, env, max_number_of_actions_per_session):
         super(ChoiceTask, self).__init__(env)
-        #self.step_penalty = step_penalty
         self.max_number_of_actions_per_session = max_number_of_actions_per_session
 
     def to_dict(self):
@@ -92,8 +92,6 @@ class ChoiceTask(ParametricLoggingEpisodicTask):
             return self.env.draw_option_value(1)
         if self.env.state.select == Select.HAS_SELECTED_3:
             return self.env.draw_option_value(2)
-        if self.env.state != self.env.prev_state:
-            return 0.0  # acquired new information
         return self.v["step_penalty"]
 
     def isFinished(self):
@@ -116,6 +114,12 @@ class Option():
             return self.v
         return 0.0
 
+    def estimate_value(self, alpha, sigma, u_fun, random_state):
+        r = (self.p ** alpha) * u_fun(self.v)
+        if sigma > 0:
+            r += random_state.normal(0, sigma)
+        return r
+
     def expected_value(self):
         return self.p * self.v
 
@@ -131,11 +135,6 @@ class ChoiceEnvironment(ParametricLoggingEnvironment):
             v_loc=19.60, # ok
             v_scale=8.08, # ok
             v_df=100, # ok
-            alpha=1.5, # ok
-            calc_sigma=0.35, # ok
-            tau_p=0.011, # ok
-            tau_v=1.1, # ok
-            f_err=0.1, # ok
             u_fun=identity,
             n_training_sets=10000):
         self.v = None # set with setup
@@ -149,13 +148,7 @@ class ChoiceEnvironment(ParametricLoggingEnvironment):
         self.v_loc = v_loc
         self.v_scale = v_scale
         self.v_df = v_df
-        #self.alpha = alpha
-        #self.calc_sigma = calc_sigma
-        #self.tau_p = tau_p
-        #self.tau_v = tau_v
-        #self.f_err = f_err
         self.u_fun = u_fun
-        #self.tau_r = 2.0  # temp
         self.n_training_sets = n_training_sets
         assert self.n_options == 3
 
@@ -269,17 +262,24 @@ class ChoiceEnvironment(ParametricLoggingEnvironment):
         #    print(self.state)
 
     def _calculate(self, state, index):
-        if state.option_values[index] != OptionValue.NOT_OBSERVED:
-            # re-observing does not change previous estimate
-            return state
-        p = self.options[index].p ** self.v["alpha"]
-        v = self.options[index].v
-        u = self.u_fun(v)
-        m = p * u + self.random_state.normal(0, self.v["calc_sigma"])
-        if m > 0:
-            state.option_values[index] = OptionValue.ACCEPTABLE
+        state.option_values[index] = OptionValue.AVERAGE
+        values = [None] * self.n_options
+        vsum = 0
+        n = 0
+        for idx in range(self.n_options):
+            if state.option_values[idx] != OptionValue.NOT_OBSERVED:
+                m = self.options[idx].estimate_value(self.v["alpha"], self.v["calc_sigma"],
+                        self.u_fun, self.random_state)
+                values[idx] = m
+                vsum += m
+                n += 1
+        avg = m / float(n)
+        if values[index] < avg - self.v["tau_c"]:
+            state.option_values[index] = OptionValue.BELOW_AVERAGE
+        elif values[index] < avg + self.v["tau_c"]:
+            state.option_values[index] = OptionValue.AVERAGE
         else:
-            state.option_values[index] = OptionValue.NOT_ACCEPTABLE
+            state.option_values[index] = OptionValue.ABOVE_AVERAGE
         return state
 
     def _compare(self, state, index1, index2):
@@ -312,14 +312,10 @@ class ChoiceEnvironment(ParametricLoggingEnvironment):
                 if i1 == 1 and i2 == 2:
                     idx = 5
             if kind == "r":
-                p1 = self.options[i1].p ** self.v["alpha"]
-                v1 = self.options[i1].v
-                u1 = self.u_fun(v1)
-                f1 = p1 * u1 + self.random_state.normal(0, self.v["calc_sigma"])
-                p2 = self.options[i2].p ** self.v["alpha"]
-                v2 = self.options[i2].v
-                u2 = self.u_fun(v2)
-                f2 = p2 * u2 + self.random_state.normal(0, self.v["calc_sigma"])
+                f1 = self.options[i1].estimate_value(self.v["alpha"], self.v["calc_sigma"],
+                        self.u_fun, self.random_state)
+                f2 = self.options[i2].estimate_value(self.v["alpha"], self.v["calc_sigma"],
+                        self.u_fun, self.random_state)
                 tau = self.v["tau_r"]
                 if i1 == 0 and i2 == 1:
                     idx = 6
@@ -327,18 +323,17 @@ class ChoiceEnvironment(ParametricLoggingEnvironment):
                     idx = 7
                 if i1 == 1 and i2 == 2:
                     idx = 8
-            if state.option_comparisons[idx] == OptionComparison.NOT_OBSERVED:
-                if f1 < f2 - tau:
-                    state.option_comparisons[idx] = OptionComparison.LESS_THAN
-                elif f1 < f2 + tau:
-                    state.option_comparisons[idx] = OptionComparison.EQUAL_TO
-                else:
-                    state.option_comparisons[idx] = OptionComparison.MORE_THAN
-                if self.random_state.rand() < self.v["f_err"]:
-                    state.option_comparisons[idx] = self.random_state.choice(
-                            [OptionComparison.LESS_THAN,
-                             OptionComparison.EQUAL_TO,
-                             OptionComparison.MORE_THAN])
+            if f1 < f2 - tau:
+                state.option_comparisons[idx] = OptionComparison.LESS_THAN
+            elif f1 < f2 + tau:
+                state.option_comparisons[idx] = OptionComparison.EQUAL_TO
+            else:
+                state.option_comparisons[idx] = OptionComparison.MORE_THAN
+            if self.random_state.rand() < self.v["f_err"]:
+                state.option_comparisons[idx] = self.random_state.choice(
+                        [OptionComparison.LESS_THAN,
+                         OptionComparison.EQUAL_TO,
+                         OptionComparison.MORE_THAN])
         return state
 
     def do_transition(self, state, action):

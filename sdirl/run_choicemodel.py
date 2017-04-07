@@ -15,13 +15,13 @@ logger = logging.getLogger(__name__)
 
 def get_model(parameters, ground_truth=None, observation=None):
     rl_params = RLParams(
-                 n_training_episodes=10000000,
-                 n_episodes_per_epoch=1000,
-                 n_simulation_episodes=1800,
+                 n_training_episodes=50000000,
+                 n_episodes_per_epoch=10000,
+                 n_simulation_episodes=18000,
                  q_alpha=0.01,
                  q_gamma=1.0,
-                 exp_epsilon=1.0,
-                 exp_decay=0.999999)
+                 exp_epsilon=0.2,
+                 exp_decay=1.0)
     cmf = ChoiceModelFactory(
                  parameters,
                  n_options=3,
@@ -30,14 +30,8 @@ def get_model(parameters, ground_truth=None, observation=None):
                  v_loc=19.60,
                  v_scale=8.08,
                  v_df=100,
-                 alpha=1.5,
-                 calc_sigma=0.35,
-                 tau_p=0.011,
-                 tau_v=1.1,
-                 f_err=0.1,
-                 n_training_sets=50000,
+                 n_training_sets=100000,
                  max_number_of_actions_per_session=20,
-                 step_penalty=-1.0,
                  rl_params=rl_params,
                  ground_truth=ground_truth,
                  observation=observation)
@@ -47,8 +41,8 @@ def get_bolfi_params(parameters):
     params = BolfiParams()
     params.bounds = tuple([p.bounds for p in parameters])
     params.sync = True
-    params.n_surrogate_samples = 10
-    params.batch_size = 2
+    params.n_surrogate_samples = 40
+    params.batch_size = 10
     params.noise_var = 0.5
     params.kernel_var = 2.00  # 50% of emp.max
     params.kernel_scale = 0.1  # 20% of smallest bounds
@@ -83,32 +77,36 @@ def run_inference_experiment(parameters, bolfi_params, model, ground_truth=None)
 if __name__ == "__main__":
     env = Environment(sys.argv)
 
-    fix_params = (   1, 2, 3, 4, 5, 6)
-    #fix_params = (0,    2, 3, 4, 5, 6)
-    #fix_params = (0, 1,    3, 4, 5, 6)
-    #fix_params = (0, 1, 2,    4, 5, 6)
-    #fix_params = (0, 1, 2, 3,    5, 6)
-    #fix_params = (0, 1, 2, 3, 4,    6)
-    #fix_params = (0, 1, 2, 3, 4, 5   )
+    inf_p = [
+            #"alpha",
+            #"calc_sigma",
+            #"tau_p",
+            #"tau_v",
+            #"tau_r",
+            #"tau_c",
+            #"f_err",
+            "step_penalty",
+            ]
 
-    vals = [("alpha", 1.5, 0.1, 1.9, "uniform", 0.1, 1.9),
-            ("calc_sigma", 0.35, 0.01, 5.0, "uniform", 0.01, 5.0),
-            ("tau_p", 0.011, 0.001, 0.5, "uniform", 0.001, 0.5),
-            ("tau_v", 1.1, 0.1, 5.0, "uniform", 0.1, 5.0),
-            ("tau_r", 2.0, 0.1, 5.0, "uniform", 0.1, 5.0),
-            ("f_err", 0.1, 0.01, 0.5, "uniform", 0.01, 0.5),
-            ("step_penalty", -1.0, -2.0, 0.0, "uniform", -2.0, 0.0)]
+    vals = [("alpha", 1.5, 0, 2, "uniform", 0, 2),  # 1.5
+            ("calc_sigma", 0, 0, 2, "uniform", 0, 2),  # 0.35
+            ("tau_p", 0.03, 0, 0.2, "uniform", 0, 0.2),  # 0.011
+            ("tau_v", 1.0, 0, 5, "uniform", 0, 5),  # 1.1
+            ("tau_r", 1.0, 0, 5, "uniform", 0, 5),  # 2.0
+            ("tau_c", 1.0, 0, 5, "uniform", 0, 5),  # 0.5
+            ("f_err", 0.0, 0, 0.5, "uniform", 0, 0.5),  # 0.1
+            ("step_penalty", -0.2, -1, 0, "uniform", -1, 1)]  # -0.2
     parameters = list()
     inf_parameters = list()
-    for i in range(7):
-        if i in fix_params:
+    for i in range(len(vals)):
+        if vals[i][0] not in inf_p:
             bounds = (vals[i][1], vals[i][1])
             prior = ParameterPrior("uniform", bounds)
         else:
             bounds = (vals[i][2], vals[i][3])
             prior = ParameterPrior(vals[i][4], vals[i][5:])
         p = ModelParameter(name=vals[i][0], bounds=bounds, prior=prior)
-        if i in fix_params:
+        if vals[i][0] not in inf_p:
             print("fixed {}".format(p.to_dict()))
         else:
             print("infer {}".format(p.to_dict()))
