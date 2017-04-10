@@ -232,13 +232,15 @@ class EpisodeQ(Q):
             l.append(lastreward)
             end_samples[k] = l
 
+        alpha = self.alpha / ((self.step + 1) ** self.w)
+
         for k, v in end_samples.items():
             # Update step for end actions
             s = k[0]
             a = k[1]
             r = float(np.mean(v))
             qvalue = self.module.getValue(s, a)
-            dq = (self.alpha / ((self.step + 1) ** self.w)) * (r - qvalue)
+            dq = alpha * (r - qvalue)
             self.module.updateValue(s, a, qvalue + dq)
 
         for k, v in samples.items():
@@ -249,7 +251,7 @@ class EpisodeQ(Q):
             qvalue = self.module.getValue(s, a)
             avgmaxnext = float(np.mean([self.module.getValue(ns, self.module.getMaxAction(ns)) \
                                         for ns in nextstates[k]]))
-            dq = (self.alpha / ((self.step + 1) ** self.w)) * (r + self.gamma * avgmaxnext - qvalue)
+            dq = alpha * (r + self.gamma * avgmaxnext - qvalue)
             self.module.updateValue(s, a, qvalue + dq)
 
         self.step += 1
