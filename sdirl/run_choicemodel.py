@@ -13,7 +13,7 @@ from sdirl.rl.simulator import RLParams
 import logging
 logger = logging.getLogger(__name__)
 
-def get_model(parameters, ground_truth=None, observation=None):
+def get_model(parameters, ground_truth=None, observation=None, reward_type="utility"):
     rl_params = RLParams(
                  n_training_episodes=50000000,
                  n_episodes_per_epoch=10000,
@@ -31,6 +31,7 @@ def get_model(parameters, ground_truth=None, observation=None):
                  v_loc=19.60,
                  v_scale=8.08,
                  v_df=100,
+                 reward_type=reward_type,
                  n_training_sets=100000,
                  max_number_of_actions_per_session=20,
                  rl_params=rl_params,
@@ -79,24 +80,25 @@ if __name__ == "__main__":
     env = Environment(sys.argv)
 
     inf_p = [
-            #"alpha",
+            "alpha",
+            #"beta",
             #"calc_sigma",
             #"tau_p",
             #"tau_v",
-            #"tau_r",
-            #"tau_c",
-            #"f_err",
-            "step_penalty",
+            #"tau_u",
+            #"step_penalty",
             ]
+    reward_type = "utility"
+    #reward_type = "regret"
+    #reward_type = "improvement"
 
     vals = [("alpha", 1.5, 0, 2, "uniform", 0, 2),  # 1.5
-            ("calc_sigma", 0, 0, 2, "uniform", 0, 2),  # 0.35
-            ("tau_p", 0.03, 0, 0.2, "uniform", 0, 0.2),  # 0.011
-            ("tau_v", 1.0, 0, 5, "uniform", 0, 5),  # 1.1
-            ("tau_r", 1.0, 0, 5, "uniform", 0, 5),  # 2.0
-            ("tau_c", 1.0, 0, 5, "uniform", 0, 5),  # 0.5
-            ("f_err", 0.0, 0, 0.5, "uniform", 0, 0.5),  # 0.1
-            ("step_penalty", -0.2, -1, 0, "uniform", -1, 1)]  # -0.2
+            ("beta", 2, 0.5, 4, "uniform", 1, 3),  # 2.0
+            ("calc_sigma", 1.5, 0, 2, "uniform", 0, 2),  # 0.35
+            ("tau_p", 0.011, 0, 0.2, "uniform", 0, 0.2),  # 0.011
+            ("tau_v", 3, 0, 5, "uniform", 0, 5),  # 1.1
+            ("tau_u", 2, 0, 5, "uniform", 0, 5),  # 2.0
+            ("step_penalty", -1, -2, 0, "uniform", -2, 2)]  # -0.2
     parameters = list()
     inf_parameters = list()
     for i in range(len(vals)):
@@ -122,5 +124,5 @@ if __name__ == "__main__":
     #ground_truth = [0.5]
     observation = ChoiceModel.get_observation_dataset()
 
-    model = get_model(parameters, ground_truth=ground_truth, observation=observation)
+    model = get_model(parameters, ground_truth=ground_truth, observation=observation, reward_type=reward_type)
     run_inference_experiment(parameters, bolfi_params, model, ground_truth)

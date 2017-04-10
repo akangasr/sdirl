@@ -42,6 +42,7 @@ class ChoiceModelFactory(SDIRLModelFactory):
             v_loc=19.60,
             v_scale=8.08,
             v_df=100,
+            reward_type="utility",
             n_training_sets=10000,
             max_number_of_actions_per_session=20,
             rl_params=RLParams(),
@@ -55,6 +56,7 @@ class ChoiceModelFactory(SDIRLModelFactory):
                     v_loc=v_loc,
                     v_scale=v_scale,
                     v_df=v_df,
+                    reward_type=reward_type,
                     n_training_sets=n_training_sets)
         task = ChoiceTask(
                     env=env,

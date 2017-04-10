@@ -46,15 +46,15 @@ class State():
 
 class OptionValue(IntEnum):
     NOT_OBSERVED = 0
-    ABOVE_AVERAGE = 1
-    AVERAGE = 2
-    BELOW_AVERAGE = 3
+    OBSERVED = 1
 
 class OptionComparison(IntEnum):
     NOT_OBSERVED = 0
-    LESS_THAN = 1
-    EQUAL_TO = 2
-    MORE_THAN = 3
+    MUCH_LESS_THAN = 1
+    LESS_THAN = 2
+    EQUAL_TO = 3
+    MORE_THAN = 4
+    MUCH_MORE_THAN = 5
 
 class Select(IntEnum):
     NOT_SELECTED = 0
@@ -114,17 +114,9 @@ class Option():
             return self.v
         return 0.0
 
-    def estimate_value(self, alpha, sigma, u_fun, random_state):
-        r = (self.p ** alpha) * u_fun(self.v)
-        if sigma > 0:
-            r += random_state.normal(0, sigma)
-        return r
-
     def expected_value(self):
         return self.p * self.v
 
-def identity(v):
-    return v
 
 class ChoiceEnvironment(ParametricLoggingEnvironment):
 
@@ -135,7 +127,7 @@ class ChoiceEnvironment(ParametricLoggingEnvironment):
             v_loc=19.60, # ok
             v_scale=8.08, # ok
             v_df=100, # ok
-            u_fun=identity,
+            reward_type="utility",
             n_training_sets=10000):
         self.v = None # set with setup
         self.random_state = None # set with setup
@@ -148,7 +140,7 @@ class ChoiceEnvironment(ParametricLoggingEnvironment):
         self.v_loc = v_loc
         self.v_scale = v_scale
         self.v_df = v_df
-        self.u_fun = u_fun
+        self.reward_type = reward_type
         self.n_training_sets = n_training_sets
         assert self.n_options == 3
 
@@ -180,8 +172,28 @@ class ChoiceEnvironment(ParametricLoggingEnvironment):
                 }
 
     def draw_option_value(self, index):
-        baseline_value = float(np.mean([c.expected_value() for c in self.options]))
-        return self.options[index].expected_value() - baseline_value
+        utilities = [option.p * self.utility_function(option.v) for option in self.options]
+        if self.reward_type == "utility":
+            return utilities[index]
+        if self.reward_type == "regret":
+            regret = utilities[index] - max(utilities)
+            return self.utility_function(regret)
+        if self.reward_type == "improvement":
+            improvement = utilities[index] - float(np.mean(utilities))
+            return self.utility_function(improvement)
+        assert False
+
+    def utility_function(self, value):
+        if value > 0:
+            return value ** self.v["alpha"]
+        else:
+            return -self.v["beta"] * (abs(value) ** self.v["alpha"])
+
+    def estimate_value(self, option):
+        r = option.p * self.utility_function(option.v)
+        if self.v["calc_sigma"] > 0:
+            r += self.random_state.normal(0, self.v["calc_sigma"])
+        return r
 
     def _get_options(self):
         if self.training is False:
@@ -261,40 +273,17 @@ class ChoiceEnvironment(ParametricLoggingEnvironment):
         #    print(self.action)
         #    print(self.state)
 
-    def _calculate(self, state, index):
-        state.option_values[index] = OptionValue.AVERAGE
-        values = [None] * self.n_options
-        vsum = 0
-        n = 0
-        for idx in range(self.n_options):
-            if state.option_values[idx] != OptionValue.NOT_OBSERVED:
-                m = self.options[idx].estimate_value(self.v["alpha"], self.v["calc_sigma"],
-                        self.u_fun, self.random_state)
-                values[idx] = m
-                vsum += m
-                n += 1
-        avg = m / float(n)
-        if values[index] < avg - self.v["tau_c"]:
-            state.option_values[index] = OptionValue.BELOW_AVERAGE
-        elif values[index] < avg + self.v["tau_c"]:
-            state.option_values[index] = OptionValue.AVERAGE
-        else:
-            state.option_values[index] = OptionValue.ABOVE_AVERAGE
-        return state
-
     def _compare(self, state, index1, index2):
-        if state.option_values[index1] == OptionValue.NOT_OBSERVED or \
-           state.option_values[index2] == OptionValue.NOT_OBSERVED:
-            # can not compare before observing first
-            return state
         assert index1 != index2, index1
+        assert state.option_values[index1] != OptionValue.NOT_OBSERVED and \
+               state.option_values[index2] != OptionValue.NOT_OBSERVED
         i1 = min(index1, index2)
         i2 = max(index1, index2)
-        for kind in ["r", "p", "v"]:
+        for kind in ["p", "v", "u"]:
             if kind == "p":
-                f1 = self.options[i1].p
-                f2 = self.options[i2].p
-                tau = self.v["tau_p"]
+                v1 = self.options[i1].p
+                v2 = self.options[i2].p
+                threshold = self.v["tau_p"]
                 if i1 == 0 and i2 == 1:
                     idx = 0
                 if i1 == 0 and i2 == 2:
@@ -302,39 +291,39 @@ class ChoiceEnvironment(ParametricLoggingEnvironment):
                 if i1 == 1 and i2 == 2:
                     idx = 2
             if kind == "v":
-                f1 = self.options[index1].v
-                f2 = self.options[index2].v
-                tau = self.v["tau_v"]
+                v1 = self.options[index1].v
+                v2 = self.options[index2].v
+                threshold = self.v["tau_v"]
                 if i1 == 0 and i2 == 1:
                     idx = 3
                 if i1 == 0 and i2 == 2:
                     idx = 4
                 if i1 == 1 and i2 == 2:
                     idx = 5
-            if kind == "r":
-                f1 = self.options[i1].estimate_value(self.v["alpha"], self.v["calc_sigma"],
-                        self.u_fun, self.random_state)
-                f2 = self.options[i2].estimate_value(self.v["alpha"], self.v["calc_sigma"],
-                        self.u_fun, self.random_state)
-                tau = self.v["tau_r"]
+            if kind == "u":
+                v1 = self.estimate_value(self.options[i1])
+                v2 = self.estimate_value(self.options[i2])
+                threshold = self.v["tau_u"]
                 if i1 == 0 and i2 == 1:
                     idx = 6
                 if i1 == 0 and i2 == 2:
                     idx = 7
                 if i1 == 1 and i2 == 2:
                     idx = 8
-            if f1 < f2 - tau:
-                state.option_comparisons[idx] = OptionComparison.LESS_THAN
-            elif f1 < f2 + tau:
-                state.option_comparisons[idx] = OptionComparison.EQUAL_TO
-            else:
-                state.option_comparisons[idx] = OptionComparison.MORE_THAN
-            if self.random_state.rand() < self.v["f_err"]:
-                state.option_comparisons[idx] = self.random_state.choice(
-                        [OptionComparison.LESS_THAN,
-                         OptionComparison.EQUAL_TO,
-                         OptionComparison.MORE_THAN])
+            state.option_comparisons[idx] = self._compare_values(v1, v2, threshold)
         return state
+
+    def _compare_values(self, v1, v2, threshold):
+        if v1 < v2 - 2 * threshold:
+            return OptionComparison.MUCH_LESS_THAN
+        elif v1 < v2 - threshold:
+            return OptionComparison.LESS_THAN
+        elif v1 < v2 + threshold:
+            return OptionComparison.EQUAL_TO
+        elif v1 < v2 + 2 * threshold:
+            return OptionComparison.MORE_THAN
+        else:
+            return OptionComparison.MUCH_MORE_THAN
 
     def do_transition(self, state, action):
         """ Changes the state of the environment based on agent action.
@@ -352,11 +341,11 @@ class ChoiceEnvironment(ParametricLoggingEnvironment):
         state = state.copy()
 
         if action == Action.OBSERVE_1:
-            state = self._calculate(state, 0)
+            state.option_values[0] = OptionValue.OBSERVED
         elif action == Action.OBSERVE_2:
-            state = self._calculate(state, 1)
+            state.option_values[1] = OptionValue.OBSERVED
         elif action == Action.OBSERVE_3:
-            state = self._calculate(state, 2)
+            state.option_values[2] = OptionValue.OBSERVED
         elif action == Action.SELECT_1:
             if state.option_values[0] != OptionValue.NOT_OBSERVED:
                 state.select = Select.HAS_SELECTED_1
