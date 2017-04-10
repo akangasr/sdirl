@@ -18,7 +18,8 @@ def get_model(parameters, ground_truth=None, observation=None):
                  n_training_episodes=50000000,
                  n_episodes_per_epoch=10000,
                  n_simulation_episodes=18000,
-                 q_alpha=0.01,
+                 q_alpha=1.0,
+                 q_w=0.8,
                  q_gamma=1.0,
                  exp_epsilon=0.2,
                  exp_decay=1.0)

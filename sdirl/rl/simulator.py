@@ -18,7 +18,8 @@ class RLParams():
             n_training_episodes=1,
             n_episodes_per_epoch=1,
             n_simulation_episodes=1,
-            q_alpha=0.1,
+            q_alpha=1.0,
+            q_w=1.0,
             q_gamma=0.98,
             exp_epsilon=0.1,
             exp_decay=1.0):
@@ -26,6 +27,7 @@ class RLParams():
         self.n_episodes_per_epoch = n_episodes_per_epoch
         self.n_simulation_episodes = n_simulation_episodes
         self.q_alpha = q_alpha
+        self.q_w = q_w
         self.q_gamma = q_gamma
         self.exp_epsilon = exp_epsilon
         self.exp_decay = exp_decay
@@ -36,6 +38,7 @@ class RLParams():
             "n_episodes_per_epoch": self.n_episodes_per_epoch,
             "n_simulation_episodes": self.n_simulation_episodes,
             "q_alpha": self.q_alpha,
+            "q_w": self.q_w,
             "q_gamma": self.q_gamma,
             "exp_epsilon": self.exp_epsilon,
             "exp_decay": self.exp_decay,
@@ -175,7 +178,7 @@ class RLAgent(LearningAgent):
         """
         module = SparseActionValueTable(n_actions, random_state)
         module.initialize(0.0)
-        learner = EpisodeQ(alpha=rl_params.q_alpha, gamma=rl_params.q_gamma)
+        learner = EpisodeQ(alpha=rl_params.q_alpha, w=rl_params.q_w, gamma=rl_params.q_gamma)
         learner.explorer = EGreedyExplorer(random_state, epsilon=rl_params.exp_epsilon, decay=rl_params.exp_decay)
         LearningAgent.__init__(self, module, learner)
 

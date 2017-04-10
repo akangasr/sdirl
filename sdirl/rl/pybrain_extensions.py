@@ -9,6 +9,7 @@ from pybrain.rl.explorers.discrete import EpsilonGreedyExplorer
 from pybrain.rl.explorers.discrete.discrete import DiscreteExplorer
 from pybrain.rl.learners import Q
 from pybrain.rl.learners.valuebased import ActionValueTable
+from pybrain.rl.learners.valuebased.valuebased import ValueBasedLearner
 
 import logging
 logger = logging.getLogger(__name__)
@@ -95,12 +96,11 @@ class SparseActionValueTable(ActionValueTable):
     """ Sparse version of the ActionValueTable from pybrain, uses less memory.
     """
 
-    def __init__(self, numActions, random_state, softq=False, name=None):
+    def __init__(self, numActions, random_state, name=None):
         Module.__init__(self, 1, 1, name)
         self.n_actions = numActions
         self.numColumns = numActions
         self.random_state = random_state
-        self.softq = softq
         if isinstance(self, Module) or isinstance(self, Connection):
             self.hasDerivatives = True
         if self.hasDerivatives:
@@ -112,10 +112,7 @@ class SparseActionValueTable(ActionValueTable):
         """ Take a vector of length 1 (the state coordinate) and return
             the action with the maximum value over all actions for this state.
         """
-        if self.softq is False:
-            outbuf[0] = self.getMaxAction(inbuf[0])
-        else:
-            outbuf[0] = self.getSoftMaxAction(inbuf[0])
+        outbuf[0] = self.getMaxAction(inbuf[0])
 
     def randomize(self):
         self.sparse_params = dict() # dictionary-of-rows sparse matrix
@@ -128,17 +125,6 @@ class SparseActionValueTable(ActionValueTable):
         values = self.getActionValues(state)
         action = sp.where(values == max(values))[0]
         return self.random_state.choice(action)
-
-    def getSoftMaxAction(self, state):
-        values = self.getActionValues(state)
-        exp_val = [np.exp(v) for v in values]
-        norm_exp_val = exp_val / sum(exp_val)
-        cum_norm_exp_val = np.cumsum(norm_exp_val)
-        rnd = self.random_state.rand()
-        for idx, lim in enumerate(cum_norm_exp_val):
-            if rnd < lim:
-                return idx
-        assert False
 
     def check_bounds(self, column=None):
         if column < 0 or column >= self.n_actions:
@@ -188,50 +174,85 @@ class EpisodeQ(Q):
         for the end state of the session.
     """
 
-    counter = 0
+    def __init__(self, alpha=1.0, w=1.0, gamma=0.99):
+        ValueBasedLearner.__init__(self)
+
+        self.alpha = alpha  # step scale
+        self.w = w  # learning rate
+        self.gamma = gamma  # temporal discount
+
+        self.step = 0
 
     def learn(self):
-        sdq = list()
-        if self.batchMode:
-            samples = self.dataset
-        else:
-            samples = [[self.dataset.getSample()]]
+        samples = dict()
+        nextstates = dict()
+        end_samples = dict()
 
-        for seq in samples:
-            # information from the previous episode (sequence)
-            # should not influence the training on this episode
-            self.laststate = None
-            self.lastaction = None
-            self.lastreward = None
+        for seq in self.dataset:
+            laststate = None
+            lastaction = None
+            lastreward = None
 
             for state, action, reward in seq:
 
                 state = int(state)
                 action = int(action)
+                reward = float(reward)
 
-                # first learning call has no last state: skip
-                if self.laststate == None:
-                    self.lastaction = action
-                    self.laststate = state
-                    self.lastreward = reward
+                if laststate == None:
+                    laststate = state
+                    lastaction = action
+                    lastreward = reward
                     continue
 
-                qvalue = self.module.getValue(self.laststate, self.lastaction)
-                maxnext = self.module.getValue(state, self.module.getMaxAction(state))
-                dq = self.alpha * (self.lastreward + self.gamma * maxnext - qvalue)
-                sdq.append(abs(dq))
-                self.module.updateValue(self.laststate, self.lastaction, qvalue + dq)
+                k = (laststate, lastaction)
+                if k in samples.keys():
+                    l = samples[k]
+                else:
+                    l = list()
+                l.append(lastreward)
+                samples[k] = l
 
-                # move state to oldstate
-                self.laststate = state
-                self.lastaction = action
-                self.lastreward = reward
+                if k in nextstates.keys():
+                    l = nextstates[k]
+                else:
+                    l = list()
+                l.append(state)
+                nextstates[k] = l
 
-            # Add the missing update step for the final action
-            qvalue = self.module.getValue(self.laststate, self.lastaction)
-            dq = self.alpha * (self.lastreward - qvalue)
-            sdq.append(abs(dq))
-            self.module.updateValue(self.laststate, self.lastaction, qvalue + dq)
+                laststate = state
+                lastaction = action
+                lastreward = reward
+
+            k = (laststate, lastaction)
+            if k in end_samples.keys():
+                l = end_samples[k]
+            else:
+                l = list()
+            l.append(lastreward)
+            end_samples[k] = l
+
+        for k, v in end_samples.items():
+            # Update step for end actions
+            s = k[0]
+            a = k[1]
+            r = float(np.mean(v))
+            qvalue = self.module.getValue(s, a)
+            dq = (self.alpha / ((self.step + 1) ** self.w)) * (r - qvalue)
+            self.module.updateValue(s, a, qvalue + dq)
+
+        for k, v in samples.items():
+            # Update step for normal actions
+            s = k[0]
+            a = k[1]
+            r = float(np.mean(v))
+            qvalue = self.module.getValue(s, a)
+            avgmaxnext = float(np.mean([self.module.getValue(ns, self.module.getMaxAction(ns)) \
+                                        for ns in nextstates[k]]))
+            dq = (self.alpha / ((self.step + 1) ** self.w)) * (r + self.gamma * avgmaxnext - qvalue)
+            self.module.updateValue(s, a, qvalue + dq)
+
+        self.step += 1
 
 
 
