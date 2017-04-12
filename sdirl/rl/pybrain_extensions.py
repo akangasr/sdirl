@@ -96,11 +96,13 @@ class SparseActionValueTable(ActionValueTable):
     """ Sparse version of the ActionValueTable from pybrain, uses less memory.
     """
 
-    def __init__(self, numActions, random_state, name=None):
+    def __init__(self, numActions, random_state, soft_q=False, soft_temp=1.0, name=None):
         Module.__init__(self, 1, 1, name)
         self.n_actions = numActions
         self.numColumns = numActions
         self.random_state = random_state
+        self.soft_q = soft_q
+        self.soft_temp = soft_temp
         if isinstance(self, Module) or isinstance(self, Connection):
             self.hasDerivatives = True
         if self.hasDerivatives:
@@ -112,7 +114,10 @@ class SparseActionValueTable(ActionValueTable):
         """ Take a vector of length 1 (the state coordinate) and return
             the action with the maximum value over all actions for this state.
         """
-        outbuf[0] = self.getMaxAction(inbuf[0])
+        if self.soft_q is False:
+            outbuf[0] = self.getMaxAction(inbuf[0])
+        else:
+            outbuf[0] = self.getSoftMaxAction(inbuf[0])
 
     def randomize(self):
         self.sparse_params = dict() # dictionary-of-rows sparse matrix
@@ -125,6 +130,17 @@ class SparseActionValueTable(ActionValueTable):
         values = self.getActionValues(state)
         action = sp.where(values == max(values))[0]
         return self.random_state.choice(action)
+
+    def getSoftMaxAction(self, state):
+        values = self.getActionValues(state)
+        exp_val = [np.exp(v / self.soft_temp) for v in values]
+        norm_exp_val = exp_val / sum(exp_val)
+        cum_norm_exp_val = np.cumsum(norm_exp_val)
+        cum_norm_exp_val[-1] = 1.01  # in case there is numerical inaccuracy
+        rnd = self.random_state.rand()
+        for idx, lim in enumerate(cum_norm_exp_val):
+            if rnd < lim:
+                return idx
 
     def check_bounds(self, column=None):
         if column < 0 or column >= self.n_actions:

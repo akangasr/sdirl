@@ -22,7 +22,9 @@ class RLParams():
             q_w=1.0,
             q_gamma=0.98,
             exp_epsilon=0.1,
-            exp_decay=1.0):
+            exp_decay=1.0,
+            soft_q=False,
+            soft_temp=1.0):
         self.n_training_episodes = n_training_episodes
         self.n_episodes_per_epoch = n_episodes_per_epoch
         self.n_simulation_episodes = n_simulation_episodes
@@ -31,6 +33,8 @@ class RLParams():
         self.q_gamma = q_gamma
         self.exp_epsilon = exp_epsilon
         self.exp_decay = exp_decay
+        self.soft_q = soft_q
+        self.soft_temp = soft_temp
 
     def to_dict(self):
         return {
@@ -42,6 +46,8 @@ class RLParams():
             "q_gamma": self.q_gamma,
             "exp_epsilon": self.exp_epsilon,
             "exp_decay": self.exp_decay,
+            "soft_q": self.soft_q,
+            "soft_temp": self.soft_temp,
             }
 
 
@@ -110,6 +116,8 @@ class RLSimulator():
                     .format(len(parameter_values), parameter_values, len(self.parameters)))
         for param, val in zip(self.parameters, parameter_values):
             self.v[param.name] = val
+            if param.name == "RL_soft_temp":  # hack
+                self.rl_params.soft_temp = val
         logger.debug("Model parameters: {}".format(self.v))
 
     def _build_model(self, random_state):
@@ -176,10 +184,17 @@ class RLAgent(LearningAgent):
     def __init__(self, outdim, n_actions, random_state, rl_params):
         """ RL agent
         """
-        module = SparseActionValueTable(n_actions, random_state)
+        module = SparseActionValueTable(n_actions,
+                                        random_state,
+                                        soft_q=rl_params.soft_q,
+                                        soft_temp=rl_params.soft_temp)
         module.initialize(0.0)
-        learner = EpisodeQ(alpha=rl_params.q_alpha, w=rl_params.q_w, gamma=rl_params.q_gamma)
-        learner.explorer = EGreedyExplorer(random_state, epsilon=rl_params.exp_epsilon, decay=rl_params.exp_decay)
+        learner = EpisodeQ(alpha=rl_params.q_alpha,
+                           w=rl_params.q_w,
+                           gamma=rl_params.q_gamma)
+        learner.explorer = EGreedyExplorer(random_state,
+                                           epsilon=rl_params.exp_epsilon,
+                                           decay=rl_params.exp_decay)
         LearningAgent.__init__(self, module, learner)
 
     def get_policy(self):

@@ -15,14 +15,16 @@ logger = logging.getLogger(__name__)
 
 def get_model(parameters, ground_truth=None, observation=None, reward_type="utility"):
     rl_params = RLParams(
-                 n_training_episodes=50000000,
+                 n_training_episodes=10000000,
                  n_episodes_per_epoch=10000,
                  n_simulation_episodes=18000,
                  q_alpha=1.0,
-                 q_w=0.8,
+                 q_w=0.99,
                  q_gamma=1.0,
-                 exp_epsilon=0.2,
-                 exp_decay=1.0)
+                 exp_epsilon=0.1,
+                 exp_decay=1.0,
+                 soft_q=True,
+                 soft_temp=0.05)
     cmf = ChoiceModelFactory(
                  parameters,
                  n_options=3,
@@ -53,7 +55,7 @@ def get_bolfi_params(parameters):
     params.gp_params_max_opt_iters = 100
     params.exploration_rate = 1.0
     params.acq_opt_iterations = 1000
-    params.batches_of_init_samples = 1  # 20%
+    params.batches_of_init_samples = 2  # 50%
     params.inference_type = InferenceType.ML
     params.use_store = False  # because of discerror measure
     return params
@@ -65,7 +67,8 @@ def run_inference_experiment(parameters, bolfi_params, model, ground_truth=None)
     if ground_truth is not None:
         error_classes=[L2Error]
     else:
-        error_classes=[DiscrepancyError]
+        error_classes = list()
+        #error_classes=[DiscrepancyError]  # save time
     experiment = InferenceExperiment(model,
             bolfi_params,
             ground_truth,
@@ -80,25 +83,27 @@ if __name__ == "__main__":
     env = Environment(sys.argv)
 
     inf_p = [
-            "alpha",
+            #"alpha",
             #"beta",
             #"calc_sigma",
             #"tau_p",
             #"tau_v",
             #"tau_u",
             #"step_penalty",
+            "RL_soft_temp",
             ]
-    reward_type = "utility"
+    #reward_type = "utility"
     #reward_type = "regret"
-    #reward_type = "improvement"
+    reward_type = "improvement"
 
-    vals = [("alpha", 1.5, 0, 2, "uniform", 0, 2),  # 1.5
+    vals = [("alpha", 1.0, 0, 2, "uniform", 0, 2),  # 1.5
             ("beta", 2, 0.5, 4, "uniform", 1, 3),  # 2.0
             ("calc_sigma", 1.5, 0, 2, "uniform", 0, 2),  # 0.35
             ("tau_p", 0.011, 0, 0.2, "uniform", 0, 0.2),  # 0.011
             ("tau_v", 3, 0, 5, "uniform", 0, 5),  # 1.1
             ("tau_u", 2, 0, 5, "uniform", 0, 5),  # 2.0
-            ("step_penalty", -1, -2, 0, "uniform", -2, 2)]  # -0.2
+            ("step_penalty", -1, -2, 0, "uniform", -2, 2),  # -0.2
+            ("RL_soft_temp", 0.1, 0, 0.5, "uniform", 0, 0.5)]  # 0.1
     parameters = list()
     inf_parameters = list()
     for i in range(len(vals)):
