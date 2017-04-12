@@ -211,9 +211,11 @@ class ChoiceEnvironment(ParametricLoggingEnvironment):
             return self.training_sets[idx], "T", "T", "T"
         options = list()
         for i in range(self.n_options):
-            p = self.random_state.beta(self.p_alpha, self.p_beta)
-            v = self.random_state.standard_t(self.v_df) * self.v_scale + self.v_loc
+            #p = self.random_state.beta(self.p_alpha, self.p_beta)
+            #v = max(0.0, self.random_state.standard_t(self.v_df) * self.v_scale + self.v_loc)
             # omit correlation r for now
+            p = self.random_state.uniform(0.1, 0.9)
+            v = self.random_state.uniform(5, 40)
             options.append(Option(p, v))
         self.training_sets.append(options)
         return options, "T", "T", "T"
@@ -279,7 +281,8 @@ class ChoiceEnvironment(ParametricLoggingEnvironment):
                state.option_values[index2] != OptionValue.NOT_OBSERVED
         i1 = min(index1, index2)
         i2 = max(index1, index2)
-        for kind in ["p", "v", "u"]:
+        #for kind in ["p", "v", "u"]:
+        for kind in ["u"]:
             if kind == "p":
                 v1 = self.options[i1].p
                 v2 = self.options[i2].p

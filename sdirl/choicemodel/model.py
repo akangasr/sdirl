@@ -185,7 +185,7 @@ class ChoiceModel(SDIRLModel):
 
     def _table_discrepancy(self, table1, table2):
         s1 = float(sum([v for v in table1.values()]))
-        s2 = float(sum([v for v in table1.values()]))
+        s2 = float(sum([v for v in table2.values()]))
         d = 0.0
         for k in table1.keys():
             d += abs((table1[k] / s1) - (table2[k] / s2))
