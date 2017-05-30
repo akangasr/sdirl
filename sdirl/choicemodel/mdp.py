@@ -149,25 +149,25 @@ class ChoiceEnvironment(ParametricLoggingEnvironment):
     def draw_option_value(self, index):
         return self.estimate_value(self.options[index], precise=True)
 
-    def utility_function(self, value, baseline=None):
+    def utility_function(self, prob, value, baseline=None):
         if baseline is None:
             if self.reward_type == "utility":
                 baseline = 0.0
             elif self.reward_type == "regret":
-                baseline = max(self.utilities)
+                baseline = self.max_value
             elif self.reward_type == "improvement":
-                baseline = float(np.mean(self.utilities))
+                baseline = self.mean_value
             else:
                 assert False
         value = value - baseline
         if value > 0:
-            return value ** self.v["alpha"]
+            return prob * np.power(value, self.v["alpha"])
         elif value < 0:
-            return -self.v["beta"] * (abs(value) ** self.v["alpha"])
+            return -self.v["beta"] * prob * np.power(abs(value), self.v["alpha"])
         return 0.0
 
     def estimate_value(self, option, precise=False):
-        r = option.p * self.utility_function(option.v) + (1.0 - option.p) * self.utility_function(0)
+        r = self.utility_function(option.p, option.v) + self.utility_function(1.0 - option.p, 0)
         if not precise and self.v["calc_sigma"] > 0:
             r += self.random_state.normal(0, self.v["calc_sigma"])
         return r
@@ -228,7 +228,9 @@ class ChoiceEnvironment(ParametricLoggingEnvironment):
     def reset(self):
         # state hidden from agent
         self.options, self.pair_index, self.decoy_target, self.decoy_type = self._get_options()
-        self.utilities = [option.p * self.utility_function(option.v, baseline=0) for option in self.options]
+        values = [option.v for option in self.options]
+        self.max_value = max(values)
+        self.mean_value = float(np.mean(values))
 
         # state observed by agent
         self.state = State([-9999]*3, [-9999]*9, -1)
