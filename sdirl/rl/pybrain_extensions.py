@@ -133,6 +133,7 @@ class SparseActionValueTable(ActionValueTable):
 
     def getSoftMaxAction(self, state):
         values = self.getActionValues(state)
+        assert self.soft_temp > 0, self.soft_temp
         exp_val = [np.exp(v / self.soft_temp) for v in values]
         norm_exp_val = exp_val / sum(exp_val)
         cum_norm_exp_val = np.cumsum(norm_exp_val)

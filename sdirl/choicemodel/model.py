@@ -188,8 +188,8 @@ class ChoiceModel(SDIRLModel):
         s2 = float(sum([v for v in table2.values()]))
         d = 0.0
         for k in table1.keys():
-            d += abs((table1[k] / s1) - (table2[k] / s2))
-        return d
+            d += (100*(table1[k] / s1) - 100*(table2[k] / s2)) ** 2
+        return d / len(table1.keys()) / 1000
 
     def plot_obs(self, obs):
         obs = self.summary_function([obs])

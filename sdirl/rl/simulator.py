@@ -116,8 +116,8 @@ class RLSimulator():
                     .format(len(parameter_values), parameter_values, len(self.parameters)))
         for param, val in zip(self.parameters, parameter_values):
             self.v[param.name] = val
-            if param.name == "RL_soft_temp":  # hack
-                self.rl_params.soft_temp = val
+            if param.name == "RL_soft_temp_exp":  # hack
+                self.rl_params.soft_temp = float(np.power(10.0, float(val)))
         logger.debug("Model parameters: {}".format(self.v))
 
     def _build_model(self, random_state):
