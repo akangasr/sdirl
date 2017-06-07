@@ -71,7 +71,7 @@ class MenuSearchFactory(SDIRLModelFactory):
                     parameters=parameters,
                     env=env,
                     task=task)
-        super(MenuSearchFactory, self).__init__(name="GridWorld",
+        super(MenuSearchFactory, self).__init__(name="MenuSearch",
                  parameters=parameters,
                  env=env,
                  task=task,
@@ -83,8 +83,7 @@ class MenuSearchFactory(SDIRLModelFactory):
 
 class MenuSearch(SDIRLModel):
     """ Menu search model.
-        From Chen et al. CHI 2016
-        Similar as in Kangasraasio et al. CHI 2017
+        Chen et al. CHI 2016 and Kangasraasio et al. CHI 2017
     """
     def evaluate_likelihood(variables, observations, random_state=None):
         raise NotImplementedError("Very difficult to evaluate.")

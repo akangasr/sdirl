@@ -100,7 +100,7 @@ class RLSimulator():
         """
         self.train_model(parameter_values, random_state=random_state)
         log_dict = self.simulate(random_state)
-        return np.atleast_1d([log_dict])
+        return log_dict
 
     def get_policy(self):
         """ Returns the current policy of the agent

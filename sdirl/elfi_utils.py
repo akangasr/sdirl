@@ -72,9 +72,7 @@ class ElfiModelFactory():
         self.model = model
 
     def get_new_instance(self):
-        random_state = Environment.get_instance().random_state
-        context = ComputationContext(seed=random_state.randint(1e7))
-        elfimodel = ElfiModel(name="model", computation_context=context)
+        elfimodel = ElfiModel(name="model")
 
         parameters = list()
         inf_parameters = list()
@@ -335,4 +333,6 @@ class BolfiFactory():  # TODO: add this to elfi?
                      acq_noise_cov=0.1, # TODO
                      bounds=self.params.bounds,
                      initial_evidence=1, # TODO
-                     update_interval=5) # TODO
+                     update_interval=5, # TODO
+                     batch_size=self.params.batch_size,
+                     seed=self.params.seed)

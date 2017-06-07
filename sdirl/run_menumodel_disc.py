@@ -10,12 +10,14 @@ from sdirl.menumodel.model import MenuSearchFactory, MenuSearch
 from sdirl.elfi_utils import BolfiParams
 from sdirl.rl.simulator import RLParams
 
+import elfi.clients.ipyparallel
+
 import logging
 logger = logging.getLogger(__name__)
 
 def get_model(parameters, ground_truth=None, observation=None):
     rl_params = RLParams(
-                 n_training_episodes=20000,
+                 n_training_episodes=2000,
                  n_episodes_per_epoch=1000,
                  n_simulation_episodes=10000,
                  q_alpha=0.1,
@@ -44,12 +46,13 @@ def get_dataset():
                 trials_per_user_present=9999,  # all
                 trials_per_user_absent=9999)  # all
 
-def get_bolfi_params(parameters):
+def get_bolfi_params(parameters, env):
     params = BolfiParams()
+    params.seed = env.get_instance().random_state.randint(1e7)
     params.bounds = tuple([p.bounds for p in parameters])
     params.sync = True
-    params.n_BO_samples = 3
-    params.batch_size = 1
+    params.n_BO_samples = 4
+    params.batch_size = 2
     params.noise_var = 0.5
     params.kernel_var = 10.0  # 50% of emp.max
     params.kernel_scale = 0.2  # 20% of smallest bounds
@@ -118,7 +121,7 @@ if __name__ == "__main__":
     ground_truth = None
     observation = None
 
-    bolfi_params = get_bolfi_params(inf_parameters)
+    bolfi_params = get_bolfi_params(inf_parameters, env)
 
     #ground_truth = [4.0]
     observation = get_dataset()

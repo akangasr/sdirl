@@ -324,7 +324,7 @@ class SDIRLModel(ModelBase):
     def simulate_observations(self, *parameters, random_state=None, index_in_batch=None):
         self._train_model_if_needed(parameters, random_state)
         obs = self.rl.simulate(random_state=random_state)
-        return np.atleast_1d([ObservationDataset(obs, parameters, "simulated")])
+        return ObservationDataset(obs, parameters, "simulated")
 
     def summary_function(self, data):
         raise NotImplementedError
