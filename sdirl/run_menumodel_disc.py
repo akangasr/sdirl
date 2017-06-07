@@ -1,5 +1,6 @@
 import os
 import sys
+import traceback
 
 import matplotlib
 matplotlib.use('Agg')
@@ -9,8 +10,7 @@ from sdirl.model import *
 from sdirl.menumodel.model import MenuSearchFactory, MenuSearch
 from sdirl.elfi_utils import BolfiParams
 from sdirl.rl.simulator import RLParams
-
-import elfi.clients.ipyparallel
+from sdirl.mpi import mpi_setup
 
 import logging
 logger = logging.getLogger(__name__)
@@ -83,7 +83,7 @@ def run_inference_experiment(parameters, bolfi_params, model, ground_truth=None)
     experiment_file = os.path.join(file_dir_path, "experiment.json")
     write_json_file(experiment_file, experiment.to_dict())
 
-if __name__ == "__main__":
+def run_experiment():
     env = Environment(sys.argv)
 
     #fix_params = (0, 1)
@@ -113,9 +113,10 @@ if __name__ == "__main__":
             prior = ParameterPrior(vals[i][4], vals[i][5:])
         p = ModelParameter(name=vals[i][0], bounds=bounds, prior=prior)
         if i in fix_params:
-            print("fixed {}".format(p.to_dict()))
+            #print("fixed {}".format(p.to_dict()))
+            pass
         else:
-            print("infer {}".format(p.to_dict()))
+            #print("infer {}".format(p.to_dict()))
             inf_parameters.append(p)
         parameters.append(p)
     ground_truth = None
@@ -128,3 +129,17 @@ if __name__ == "__main__":
 
     model = get_model(parameters, ground_truth=ground_truth, observation=observation)
     run_inference_experiment(parameters, bolfi_params, model, ground_truth)
+
+if __name__ == "__main__":
+    try:
+        client = mpi_setup()
+        run_experiment()
+        client.end()
+    except:
+        tb = traceback.format_exc()
+        logger.critical(tb)
+        client.comm.Abort()
+        logger.critical("Aborted.")
+        sys.exit()
+        assert False
+

@@ -1,0 +1,182 @@
+import numpy as np
+import time
+from enum import IntEnum
+from collections import deque
+import itertools
+from mpi4py import MPI
+from elfi.client import set_client, ClientBase
+
+import logging
+logger = logging.getLogger(__name__)
+
+
+class Tag(IntEnum):
+    FREE  = 0  # Worker indicating that it is free to do work
+    RECV  = 1  # Worker will next receive task object
+    TASK  = 2  # Task object to be run
+    READY = 3  # Returned ready task object
+    END   = 4  # Worker will next terminate
+
+
+def mpi_setup():
+    comm = MPI.COMM_WORLD
+    rank = comm.Get_rank()
+    size = comm.Get_size()
+    status = MPI.Status()
+    dummy = np.zeros(1)
+    if rank == 0:
+        logger.info("MPI SETUP FOR MASTER")
+        client = MPIClient(comm, size, status, dummy)
+        set_client(client)
+        return client
+    logger.info("MPI SETUP FOR WORKER {}".format(rank))
+    while True:
+        logger.info("MPI WORKER {}: Free..".format(rank))
+        comm.Send(dummy, dest=0, tag=Tag.FREE)
+        comm.Recv(dummy, source=0, tag=MPI.ANY_SOURCE, status=status)
+        tag = status.Get_tag()
+
+        if tag == Tag.RECV:
+            task = comm.recv(None, source=0, tag=Tag.TASK)
+            logger.info("MPI WORKER {}: Executing task {}..".format(rank, task))
+            task.run()
+            comm.send(task, dest=0, tag=Tag.READY)
+        elif tag == Tag.END:
+            logger.info("MPI WORKER {}: Terminating.".format(rank))
+            break
+        else:
+            logger.info("MPI WORKER {}: Received unexpected command: '{}'!".format(rank, tag))
+    comm.Abort()
+    assert False
+
+
+class MPITask():
+
+    def __init__(self, idx, kallable, args, kwargs):
+        self.idx = idx
+        self.kallable = kallable
+        self.args = args
+        self.kwargs = kwargs
+        self.result = None
+        self.created_time = time.time()
+        self.start_time = None
+        self.end_time = None
+        self.run_duration = None
+
+    def run(self):
+        self.start_time = time.time()
+        self.result = self.kallable(*self.args, **self.kwargs)
+        self.end_time = time.time()
+        self.run_duration = self.end_time - self.start_time
+
+    def __str__(self):
+        return "{}".format(self.idx)
+
+
+class MPIClient(ClientBase):
+
+    def __init__(self, comm, size, status, dummy, wait_delay=2.0):
+        self.comm = comm
+        self.size = size
+        self.status = status
+        self.dummy = dummy
+        self.wait_delay = wait_delay
+        self.waiting_tasks = deque()
+        self.pending_tasks = {} # worker : task
+        self.ready_tasks = {} # idx : task
+        self._idx = itertools.count()
+        self.pool = set()
+        self._find_workers()
+        logger.info("MPI MASTER: Setup done")
+
+    def end(self):
+        logger.info("MPI MASTER: Terminating workers")
+        for j in range(1,self.size):
+            self.comm.Send(self.dummy, dest=j, tag=Tag.END)
+
+    @property
+    def num_cores(self):
+        return self.size - 1
+
+    @property
+    def is_full(self):
+        return len(self.pending_tasks) + len(self.waiting_tasks) >= self.num_cores
+
+    def _run_tasks(self):
+        self._find_workers()
+        while len(self.pool) > 0 and len(self.waiting_tasks) > 0:
+            worker = self.pool.pop()
+            task = self.waiting_tasks.popleft()
+            self.comm.Send(self.dummy, dest=worker, tag=Tag.RECV)
+            self.comm.send(task, dest=worker, tag=Tag.TASK)
+            logger.info("MPI MASTER: Executing task {} at Worker {}".format(task, worker))
+            self.pending_tasks[worker] = task
+
+    def _wait_for_next_ready(self):
+        self._run_tasks()
+        while len(self.pending_tasks) > 0:
+            if self.comm.Iprobe(source=MPI.ANY_SOURCE, tag=Tag.READY, status=self.status):
+                worker = self.status.Get_source()
+                del self.pending_tasks[worker]
+                task = self.comm.recv(None, source=worker, tag=Tag.READY)
+                logger.info("MPI MASTER: Received task {} from worker {}".format(task.idx, worker))
+                self.ready_tasks[task.idx] = task
+                logger.info("MPI MASTER: Ready {}".format(self.ready_tasks))
+                self._run_tasks()
+                break
+            time.sleep(self.wait_delay)
+            logger.info("MPI MASTER: Waiting for a task to complete")
+
+    def _find_workers(self):
+        while self.comm.Iprobe(source=MPI.ANY_SOURCE, tag=Tag.FREE, status=self.status):
+            worker = self.status.Get_source()
+            self.pool.add(worker)
+            self.comm.Recv(self.dummy, source=worker, tag=Tag.FREE)
+            logger.info("MPI MASTER: Added Worker {} to pool".format(worker))
+
+    def apply(self, kallable, *args, **kwargs):
+        """ add job to list and return job index immedately """
+        idx = self._idx.__next__()
+        task = MPITask(idx, kallable, args, kwargs)
+        self.waiting_tasks.append(task)
+        self._run_tasks()
+        logger.info("MPI MASTER: Add task {} to waitlist".format(idx))
+        return idx
+
+    def apply_sync(self, kallable, *args, **kwargs):
+        """ add job to list and wait until finished, return result """
+        idx = self.apply(kallable, *args, **kwargs)
+        return self.get(idx)
+
+    def get(self, idx):
+        """ wait until this job is finished, return result """
+        idx, result = self.wait_next([idx])
+        return result
+
+    def wait_next(self, idx_list):
+        """ wait until one job in list finishes, return index and result """
+        logger.info("MPI MASTER: Waiting for a task in {}".format(idx_list))
+        # TODO: may get into deadlock with badly chosen idx_list
+        while True:
+            for idx in idx_list:
+                if self.is_ready(idx):
+                    return idx, self.ready_tasks[idx].result
+            self._wait_for_next_ready()
+
+    def is_ready(self, idx):
+        """ true if task is ready """
+        return idx in self.ready_tasks.keys()
+
+    def remove_task(self, idx):
+        """ removes task from waiting tasks (no effect to running or ready tasks) """
+        for i in range(len(self.waiting_tasks)):
+            if self.waiting_tasks[i].idx == idx:
+                del self.waiting_tasks[i]
+                return True
+        return False
+
+    def reset(self):
+        """ clears all waiting and ready tasks (no effect to running tasks) """
+        self.waiting_tasks = deque()
+        self.ready_tasks = dict()
+

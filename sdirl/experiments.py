@@ -96,9 +96,10 @@ class ComputeBolfiPosterior(ExperimentPhase):
         self._posterior_class = SerializableBolfiPosterior
 
     def _run(self):
-        logger.info("Computing Bolfi posterior")
         start_time = time.time()
+        logger.info("Running BOLFI inference..")
         self.bolfi.infer(self.n_samples)
+        logger.info("BOLFI inference finished")
         posterior = self.bolfi.infer_posterior()
         posterior.__class__ = self._posterior_class  # hacky
         end_time = time.time()
