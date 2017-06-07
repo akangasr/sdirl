@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 def get_model(parameters, ground_truth=None, observation=None):
     rl_params = RLParams(
-                 n_training_episodes=20000000,
+                 n_training_episodes=20000,
                  n_episodes_per_epoch=1000,
                  n_simulation_episodes=10000,
                  q_alpha=0.1,
@@ -48,8 +48,8 @@ def get_bolfi_params(parameters):
     params = BolfiParams()
     params.bounds = tuple([p.bounds for p in parameters])
     params.sync = True
-    params.n_surrogate_samples = 400
-    params.batch_size = 80
+    params.n_BO_samples = 3
+    params.batch_size = 1
     params.noise_var = 0.5
     params.kernel_var = 10.0  # 50% of emp.max
     params.kernel_scale = 0.2  # 20% of smallest bounds
@@ -58,7 +58,6 @@ def get_bolfi_params(parameters):
     params.gp_params_max_opt_iters = 100
     params.exploration_rate = 1.0
     params.acq_opt_iterations = 1000
-    params.batches_of_init_samples = 1  # 20%
     params.inference_type = InferenceType.MAP
     params.use_store = False  # because of discerror measure
     return params
@@ -120,7 +119,6 @@ if __name__ == "__main__":
     observation = None
 
     bolfi_params = get_bolfi_params(inf_parameters)
-    bolfi_params.client = env.client
 
     #ground_truth = [4.0]
     observation = get_dataset()

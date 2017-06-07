@@ -105,13 +105,13 @@ class MenuSearch(SDIRLModel):
         return ObservationDataset(dataset.get(), name="Bailly")
 
     def summary_function(self, obs):
-        return np.atleast_1d(ObservationDataset([Observation(ses["action_duration"], ses["target_present"]) for ses in obs[0].data["sessions"]], name="summary"))
+        return ObservationDataset([Observation(ses["action_duration"], ses["target_present"]) for ses in obs.data["sessions"]], name="summary")
 
-    def calculate_discrepancy(self, observations, sim_observations):
-        tct_mean_pre_obs, tct_std_pre_obs = self._tct_mean_std(present=True, obs=observations[0][0].data)
-        tct_mean_pre_sim, tct_std_pre_sim = self._tct_mean_std(present=True, obs=sim_observations[0][0].data)
-        tct_mean_abs_obs, tct_std_abs_obs = self._tct_mean_std(present=False, obs=observations[0][0].data)
-        tct_mean_abs_sim, tct_std_abs_sim = self._tct_mean_std(present=False, obs=sim_observations[0][0].data)
+    def calculate_discrepancy(self, *simulated, observed=None):
+        tct_mean_pre_obs, tct_std_pre_obs = self._tct_mean_std(present=True, obs=simulated[0].data)
+        tct_mean_pre_sim, tct_std_pre_sim = self._tct_mean_std(present=True, obs=observed[0].data)
+        tct_mean_abs_obs, tct_std_abs_obs = self._tct_mean_std(present=False, obs=simulated[0].data)
+        tct_mean_abs_sim, tct_std_abs_sim = self._tct_mean_std(present=False, obs=observed[0].data)
         disc = np.abs(tct_mean_pre_obs - tct_mean_pre_sim) ** 2 \
                 + np.abs(tct_std_pre_obs - tct_std_pre_sim) \
                 + np.abs(tct_mean_abs_obs - tct_mean_abs_sim) ** 2 \
@@ -127,7 +127,9 @@ class MenuSearch(SDIRLModel):
         return np.mean(tct), np.std(tct)
 
     def plot_obs(self, obs):
-        assert isinstance(obs, ObservationDataset), type(obs)
+        if not isinstance(obs, ObservationDataset):
+            print("Can't print observation of type {}".format(type(obs)))
+            return
         features = get_feature_set(obs.data)
         plot_features(features)
 

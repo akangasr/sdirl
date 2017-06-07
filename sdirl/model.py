@@ -1,25 +1,8 @@
-
 import numpy as np
 import scipy as sp
-import sys
-import os
 import time
 
-import matplotlib.pyplot as plt
-
-import dask
-import GPy
-import elfi
-from elfi.wrapper import Wrapper
-from elfi.bo.gpy_model import GPyModel
-
 from sdirl.rl.utils import PathTreeIterator
-
-import json
-import GPy
-
-from distributed import Client
-from functools import partial
 
 import logging
 logger = logging.getLogger(__name__)
@@ -338,7 +321,7 @@ class SDIRLModel(ModelBase):
 
 
     # Approximate inference using discrepancy
-    def simulate_observations(self, *parameters, random_state=None):
+    def simulate_observations(self, *parameters, random_state=None, index_in_batch=None):
         self._train_model_if_needed(parameters, random_state)
         obs = self.rl.simulate(random_state=random_state)
         return np.atleast_1d([ObservationDataset(obs, parameters, "simulated")])
@@ -346,7 +329,7 @@ class SDIRLModel(ModelBase):
     def summary_function(self, data):
         raise NotImplementedError
 
-    def calculate_discrepancy(self, sim_data, obs_data):
+    def calculate_discrepancy(self, *sim_data, obs_data):
         raise NotImplementedError
 
 

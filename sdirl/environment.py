@@ -2,23 +2,8 @@ import os
 import sys
 import numpy as np
 import random
-import json
-import GPy
-import time
-from copy import deepcopy
 
 import elfi
-from elfi import InferenceTask
-from elfi.bo.gpy_model import GPyModel
-from elfi.bo.acquisition import *
-from elfi.methods import BOLFI
-from elfi.posteriors import BolfiPosterior
-
-import dask
-from distributed import Client
-
-from matplotlib import pyplot as pl
-from matplotlib.backends.backend_pdf import PdfPages
 
 import logging
 logger = logging.getLogger(__name__)
@@ -38,7 +23,6 @@ class Environment():
             Environment.disable_pybrain_warnings()
         Environment.__instance.args = args
         Environment.__instance.random_state = Environment.__instance.rng_setup()
-        Environment.__instance.client = Environment.__instance.client_setup()
         return Environment.__instance
 
     @staticmethod
@@ -94,19 +78,4 @@ class Environment():
         random.seed(seed)
         np.random.seed(random.randint(0, 10e7))
         return np.random.RandomState(random.randint(0, 10e7))
-
-    def client_setup(self):
-        """ Set up and return a dask client or None
-        """
-        client = None
-        if len(self.args) > 2:
-            address = "127.0.0.1:{}".format(int(self.args[2]))
-            logger.info("Dask client at " + address)
-            client = Client(address)
-            dask.set_options(get=client.get)
-        else:
-            logger.info("Default dask client (client=None)")
-        return client
-
-
 

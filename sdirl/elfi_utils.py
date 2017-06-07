@@ -1,23 +1,16 @@
-import os
-import sys
 import numpy as np
-import random
-import json
 import GPy
-import time
 from enum import IntEnum
 
 import elfi
-from elfi.bo.gpy_model import GPyModel
-from elfi.bo.acquisition import *
-from elfi.methods import BOLFI, BolfiAcquisition, AsyncBolfiAcquisition
-from elfi.posteriors import BolfiPosterior
-from elfi.tools import vectorize
+from elfi.methods.bo.gpy_regression import GPyRegression
+from elfi.methods.bo.acquisition import *
+from elfi.methods.methods import BOLFI
+from elfi.methods.results import BolfiPosterior
+from elfi.model.tools import vectorize
+from elfi.model.elfi_model import ElfiModel, ComputationContext
 
 from sdirl.environment import Environment
-
-import dask
-from distributed import Client
 
 import logging
 logger = logging.getLogger(__name__)
@@ -30,8 +23,46 @@ BolfiParams - Encapsulates various elfi.BOLFI parameters
 BolfiFactory - Constructs elfi.BOLFI using BolfiParams and an elfi.InferenceTask
 """
 
-class InferenceTaskFactory():
-    """ Factory for constructing elfi.InferenceTask objects from ModelBase
+class GridAcquisition(AcquisitionBase):
+    """Acquisition from a grid.
+
+    Parameters
+    ----------
+    tics : list of lists containing axis locations defining the grid
+           example: [[1,2,3], [2,4]] -> grid (1,2), (1,4), (2,2), (2,4), (3,2), (3,4)
+    """
+
+    def __init__(self, tics, *args, **kwargs):
+        self.tics = tics
+        self.next_id = 0
+        n_priors = len(prior_list)
+
+        # hacky...
+        class DummyModel(object):
+            pass
+        model = DummyModel()
+        model.input_dim = len(self.tics)
+        model.bounds = [(l[0], l[-1]) for l in self.tics]
+        model.evaluate = lambda x : exec('raise NotImplementedError')
+
+        super(GridAcquisition, self).__init__(*args, model=model, **kwargs)
+
+    def acquire(self, n_values, pending_locations=None):
+        ret = super(RandomAcquisition, self).acquire(n_values, pending_locations)
+        for i, p in enumerate(self.prior_list):
+            idx = self.next_id
+            for j, tics in enumerate(self.tics):
+                l = len(tics)
+                mod = l % idx
+                idx /= l
+                ret[j, i] = tics[mod]
+        logger.debug("Acquired {}".format(n_values))
+        return ret
+
+
+
+class ElfiModelFactory():
+    """ Factory for constructing ElfiModel objects from ModelBase
 
     Parameters
     ----------
@@ -42,46 +73,51 @@ class InferenceTaskFactory():
 
     def get_new_instance(self):
         random_state = Environment.get_instance().random_state
-        itask = elfi.InferenceTask(seed=random_state.randint(1e7))
+        context = ComputationContext(seed=random_state.randint(1e7))
+        elfimodel = ElfiModel(name="model", computation_context=context)
+
         parameters = list()
         inf_parameters = list()
         for parameter in self.model.parameters:
             if parameter.bounds[0] > parameter.bounds[1]:
                 raise ValueError("Parameter bounds must be in correct order, received {}".format(parameter.bounds))
             elif parameter.bounds[0] == parameter.bounds[1]:
-                param = elfi.core.Constant(parameter.name,
-                                           parameter.bounds[0])
+                param = elfi.Constant(name=parameter.name,
+                                      value=parameter.bounds[0],
+                                      model=elfimodel)
             else:
-                param = elfi.Prior(parameter.name,
-                                   parameter.prior.distribution_name,
+                param = elfi.Prior(parameter.prior.distribution_name,
                                    *parameter.prior.params,
-                                   inference_task=itask)
+                                   name=parameter.name,
+                                   model=elfimodel)
                 inf_parameters.append(param)
             parameters.append(param)
+        logger.info("Parameters: {}".format(parameters))
+
         if self.model.observation is not None:
             y = self.model.observation
         elif self.model.ground_truth is not None:
             y = self.model.simulator(*self.model.ground_truth, random_state=random_state)
         else:
             raise ValueError("Model should have observation or ground truth")
-        print(parameters)
-        Y = elfi.Simulator(self.model.name,
-                           vectorize(self.model.simulator),
+
+        Y = elfi.Simulator(vectorize(self.model.simulator),
                            *parameters,
                            observed=y,
-                           inference_task=itask)
+                           name="simulator",
+                           model=elfimodel)
         summaries = list()
         for summary in self.model.summaries:
-            summaries.append(elfi.Summary(summary.name,
-                                         vectorize(summary.function),
-                                         Y,
-                                         inference_task=itask))
-        d = elfi.Discrepancy('discrepancy',
-                             vectorize(self.model.discrepancy),
+            summaries.append(elfi.Summary(vectorize(summary.function),
+                                          Y,
+                                          name=summary.name,
+                                          model=elfimodel))
+        d = elfi.Discrepancy(vectorize(self.model.discrepancy),
                              *summaries,
-                             inference_task=itask)
-        itask.parameters = inf_parameters
-        return itask
+                             name="discrepancy",
+                             model=elfimodel)
+        elfimodel.parameters = [p.name for p in inf_parameters]
+        return elfimodel
 
 
 class SerializableBolfiPosterior(BolfiPosterior):  # TODO: add this to elfi?
@@ -111,10 +147,11 @@ class SerializableBolfiPosterior(BolfiPosterior):  # TODO: add this to elfi?
         return SerializableBolfiPosterior(model, None, max_opt_iters=opt_iters)
 
     def to_dict(self):
+        return {"none": "none"}  # TODO
         # hacky
         data = {
-            "X_params": self.model.gp.X.tolist() if self.model.gp is not None else [],
-            "Y_disc": self.model.gp.Y.tolist() if self.model.gp is not None else [],
+            "X_params": self.model._gp.X.tolist() if self.model._gp is not None else [],
+            "Y_disc": self.model._gp.Y.tolist() if self.model._gp is not None else [],
             "kernel_class": self.model.kernel_class.__name__,
             "kernel_var": self.model.kernel_var,
             "kernel_scale": self.model.kernel_scale,
@@ -142,7 +179,7 @@ class SerializableBolfiPosterior(BolfiPosterior):  # TODO: add this to elfi?
         noise_var = data["noise_var"]
         optimizer = data["optimizer"]
         max_opt_iters = data["max_opt_iters"]
-        model = GPyModel(input_dim=len(bounds),
+        model = GPyRegression(input_dim=len(bounds),
                         bounds=bounds,
                         kernel_class=kernel_class,
                         kernel_var=kernel_var,
@@ -172,7 +209,10 @@ class BolfiParams():  # TODO: add this to elfi?
     """
     def __init__(self,
             bounds=((0,1),),
-            n_surrogate_samples=1,
+            n_BO_samples=0,
+            n_random_samples=0,
+            n_grid_samples=0,
+            grid_axis=None,
             batch_size=1,
             sync=True,
             kernel_class=GPy.kern.RBF,
@@ -185,12 +225,14 @@ class BolfiParams():  # TODO: add this to elfi?
             acq_opt_iterations=100,
             rbf_scale=1.0,
             rbf_amplitude=1.0,
-            batches_of_init_samples=1,
             inference_type=InferenceType.FULL_POSTERIOR,
             client=None,
             use_store=True):
         self.bounds = bounds
-        self.n_surrogate_samples = n_surrogate_samples
+        self.n_BO_samples = n_BO_samples
+        self.n_random_samples = n_random_samples
+        self.n_grid_samples = n_grid_samples
+        self.grid_axis = grid_axis
         self.batch_size = batch_size
         self.sync = sync
         self.kernel_class = kernel_class
@@ -203,22 +245,17 @@ class BolfiParams():  # TODO: add this to elfi?
         self.acq_opt_iterations = acq_opt_iterations
         self.rbf_scale = rbf_scale
         self.rbf_amplitude = rbf_amplitude
-        self.batches_of_init_samples = batches_of_init_samples
         self.inference_type = inference_type
         self.client = client
         self.use_store = use_store
 
-    @property
-    def number_of_init_and_acq_samples(self):
-        n_init_samples = min(self.batch_size * self.batches_of_init_samples,
-                             self.n_surrogate_samples)
-        n_acq_samples = self.n_surrogate_samples - n_init_samples
-        return n_init_samples, n_acq_samples
-
     def to_dict(self):
         return {
             "bounds": self.bounds,
-            "n_surrogate_samples": self.n_surrogate_samples,
+            "n_BO_samples": self.n_BO_samples,
+            "n_random_samples": self.n_random_samples,
+            "n_grid_samples": self.n_grid_samples,
+            "grid_axis": self.grid_axis,
             "batch_size": self.batch_size,
             "sync": self.sync,
             "kernel_class": self.kernel_class.__name__,
@@ -231,23 +268,10 @@ class BolfiParams():  # TODO: add this to elfi?
             "acq_opt_iterations": self.acq_opt_iterations,
             "rbf_scale": self.rbf_scale,
             "rbf_amplitude": self.rbf_amplitude,
-            "batches_of_init_samples": self.batches_of_init_samples,
             "inference_type": self.inference_type,
             #"client": self.client,  # TODO: serialization of client?
             "use_store": self.use_store
             }
-
-
-class BolfiMLAcquisition(SecondDerivativeNoiseMixin, LCBAcquisition):
-    """ Acquisition function for synchronous ML inference with BOLFI
-    """
-    pass
-
-
-class AsyncBolfiMLAcquisition(RbfAtPendingPointsMixin, LCBAcquisition):
-    """ Acquisition function for asynchronous ML inference with BOLFI
-    """
-    pass
 
 
 class BolfiFactory():  # TODO: add this to elfi?
@@ -255,20 +279,20 @@ class BolfiFactory():  # TODO: add this to elfi?
 
     Parameters
     ----------
-    task : elfi.InferenceTask
+    model : ElfiModel
     params : BolfiParams
     """
-    def __init__(self, task, params):
-        self.task = task
+    def __init__(self, model, params):
+        self.model = model
         self.params = params
-        if len(self.task.parameters) < 1:
+        if len(self.model.parameters) < 1:
             raise ValueError("Task must have at least one parameter.")
-        if len(self.params.bounds) != len(self.task.parameters):
+        if len(self.params.bounds) != len(self.model.parameters):
             raise ValueError("Task must have as many parameters (was {}) as there are bounds in parameters (was {})."\
-                    .format(len(self.task.parameters), len(self.params.bounds)))
+                    .format(len(self.model.parameters), len(self.params.bounds)))
 
     def _get_new_gpmodel(self):
-        return GPyModel(input_dim=len(self.params.bounds),
+        return GPyRegression(input_dim=len(self.params.bounds),
                         bounds=self.params.bounds,
                         kernel_class=self.params.kernel_class,
                         kernel_var=self.params.kernel_var,
@@ -278,36 +302,20 @@ class BolfiFactory():  # TODO: add this to elfi?
                         max_opt_iters=self.params.gp_params_max_opt_iters)
 
     def _get_new_acquisition(self, gpmodel):
-        n_init_samples, n_acq_samples = self.params.number_of_init_and_acq_samples
-        acquisition_init = RandomAcquisition(self.task.parameters,
-                                             n_samples=n_init_samples)
-        acquisition_init.model = gpmodel  # TODO: fix elfi acquisition to handle this correctly
-        if n_acq_samples < 1:
-            logger.warning("Only initial random samples")
-            return acquisition_init
-        if self.params.sync is True:
-            if self.params.inference_type == InferenceType.ML:
-                cls = BolfiMLAcquisition
-            else:
-                cls = BolfiAcquisition
-            acquisition = cls(
-                    exploration_rate=self.params.exploration_rate,
-                    opt_iterations=self.params.acq_opt_iterations,
-                    model=gpmodel,
-                    n_samples=n_acq_samples)
-        else:
-            if self.params.inference_type == InferenceType.ML:
-                cls = AsyncBolfiMLAcquisition
-            else:
-                cls = AsyncBolfiAcquisition
-            acquisition = cls(
-                    exploration_rate=self.params.exploration_rate,
-                    opt_iterations=self.params.acq_opt_iterations,
-                    rbf_scale=self.params.rbf_scale,
-                    rbf_amplitude=self.params.rbf_amplitude,
-                    model=gpmodel,
-                    n_samples=n_acq_samples)
-        return acquisition_init + acquisition
+        if self.params.n_random_samples > 0:
+            assert False # TODO
+            #acq = RandomAcquisition(self.task.parameters)
+            #return acq
+        if self.params.n_grid_samples > 0:
+            assert False # TODO
+            #acq = GridAcquisition(self.task.parameters)
+            #return acq
+        if self.params.n_BO_samples > 0:
+            return LCBSC(delta=0.001,
+                         model=gpmodel)
+
+        logger.critical("No acquisition samples set, aborting!")
+        assert False
 
     def _get_new_store(self):
         if self.params.use_store is True:
@@ -319,14 +327,12 @@ class BolfiFactory():  # TODO: add this to elfi?
         """
         gpmodel = self._get_new_gpmodel()
         acquisition = self._get_new_acquisition(gpmodel)
-        store = self._get_new_store()
-        return BOLFI(distance_node=self.task.discrepancy,
-                     parameter_nodes=self.task.parameters,
-                     batch_size=self.params.batch_size,
-                     store=store,
-                     model=gpmodel,
-                     acquisition=acquisition,
-                     sync=self.params.sync,
+#        store = self._get_new_store()
+        return BOLFI(model=self.model,
+                     target="discrepancy",
+                     target_model=gpmodel,
+                     acquisition_method=acquisition,
+                     acq_noise_cov=0.1, # TODO
                      bounds=self.params.bounds,
-                     client=self.params.client)
-
+                     initial_evidence=1, # TODO
+                     update_interval=5) # TODO

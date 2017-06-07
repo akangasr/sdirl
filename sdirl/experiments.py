@@ -1,11 +1,9 @@
-import os
 import numpy as np
 import json
 import time
 
 from sdirl.elfi_utils import *
 from sdirl.model import ObservationDataset
-from elfi.async import wait
 
 from matplotlib import pyplot as pl
 from matplotlib.backends.backend_pdf import PdfPages
@@ -89,9 +87,10 @@ class ExperimentPhase():
 
 class ComputeBolfiPosterior(ExperimentPhase):
 
-    def __init__(self, *args, bolfi=None, **kwargs):
+    def __init__(self, *args, bolfi=None, n_samples=0, **kwargs):
         super(ComputeBolfiPosterior, self).__init__(*args, **kwargs)
         self.name = "Compute Bolfi Posterior"
+        self.n_samples = n_samples
         self.bolfi = bolfi
         self.results = BolfiResults()
         self._posterior_class = SerializableBolfiPosterior
@@ -99,14 +98,15 @@ class ComputeBolfiPosterior(ExperimentPhase):
     def _run(self):
         logger.info("Computing Bolfi posterior")
         start_time = time.time()
-        posterior = self.bolfi.infer()
+        self.bolfi.infer(self.n_samples)
+        posterior = self.bolfi.infer_posterior()
         posterior.__class__ = self._posterior_class  # hacky
         end_time = time.time()
         self.results.duration = end_time - start_time
-        if self.bolfi.store is not None:
-            self.results.posteriors = self._posterior_class.from_store(self.bolfi.store)
-        else:
-            self.results.posteriors = [posterior]
+        #if self.bolfi.store is not None:
+        #    self.results.posteriors = self._posterior_class.from_store(self.bolfi.store)
+        #else:
+        self.results.posteriors = [posterior]
         final_posterior = self.results.posteriors[-1]
         if hasattr(final_posterior, "ML"):
             logger.info("Final ML estimate: {}".format(final_posterior.ML))
@@ -118,12 +118,12 @@ class ComputeBolfiPosterior(ExperimentPhase):
             self._plot_posterior(posterior, plot_params)
 
     def _plot_posterior(self, posterior, plot_params):
-        if posterior.model.gp is None:
+        if posterior.model._gp is None:
             self._plot_text_page("No model to plot", plot_params)
             return
         fig = pl.figure(figsize=plot_params.figsize)
         try:
-            posterior.model.gp.plot()
+            posterior.model._gp.plot()
         except:
             fig.text(0.02, 0.01, "Was not able to plot model")
         plot_params.pdf.savefig()
@@ -216,16 +216,16 @@ class ErrorMeasure():
 
 
 class DiscrepancyError(ErrorMeasure):
-    """ Calculates discrepancy to observations (assumed to be already inside the itask)
+    """ Calculates discrepancy to observations (assumed to be already inside the elfimodel)
 
     Parameters
     ----------
-    itask : elfi.InferenceTask
+    elfimodel : ElfiModel
     """
-    def __init__(self, *args, model=None, itask=None, client=None, **kwargs):
+    def __init__(self, *args, model=None, elfimodel=None, client=None, **kwargs):
         super(DiscrepancyError, self).__init__(*args, **kwargs)
         self.model = model
-        self.itask = itask
+        self.elfimodel = elfimodel
         self.client = client
         self._plot_store = list()  # hacky
         self._obs = None  # hacky
@@ -233,8 +233,9 @@ class DiscrepancyError(ErrorMeasure):
 
     def _error(self, value):
         # hacky, depends on elfi and dask implementation details
-        discrepancy = self._compute_discrepancy(value)
-        sim = self._get_simulator()
+        return 0.0 # TODO
+        discrepancy = 0.0 # self._compute_discrepancy(value) # TODO
+        sim = self.elfimodel["simulator"]
         if self._obs is None:
             self._obs = sim.observed[0][0]
         data = self._get_last_sim_data(sim)
@@ -243,15 +244,16 @@ class DiscrepancyError(ErrorMeasure):
 
     def _compute_discrepancy(self, value):
         wv_dict = {param.name: np.atleast_2d(value[i])
-                               for i, param in enumerate(self.itask.parameters)}
+                               for i, param in enumerate([self.elfimodel[p] for p in self.elfimodel.parameters])} # TODO: alphabetical order?
         logger.info("Simulating data with values {}..".format(value))
-        future = self.itask.discrepancy.generate(1, with_values=wv_dict)
-        result, _a, _b = elfi.wait([future], self.client)
+        future = self.elfimodel.discrepancy.generate(1, with_values=wv_dict)
+        assert False
+        #result, _a, _b = elfi.wait([future], self.client)
         logger.info("Simulated")
         return float(result)
 
     def _get_simulator(self):
-        return self.itask._find_by_class(elfi.Simulator)[0]
+        return self.elfimodel._find_by_class(elfi.Simulator)[0]
 
     def _get_last_sim_data(self, sim):
         i = 1000  # assume larger than any sample id we have
@@ -283,7 +285,7 @@ class DiscrepancyError(ErrorMeasure):
 
     def to_dict(self):
         ret = super(DiscrepancyError, self).to_dict()
-        ret["itask"] = "inference task object" if self.itask is not None else None
+        ret["elfimodel"] = "elfi model object" if self.elfimodel is not None else None
         ret["client"] = "client object" if self.client is not None else None
         for v, data in self._plot_store:
             ret["sim_at_{}".format(v)] = data.to_dict()
@@ -400,13 +402,14 @@ class InferenceExperiment(Experiment):
         else:
             raise ValueError("Need either ground truth or observation")
         self.model = model
-        itf = InferenceTaskFactory(self.model)
-        itask = itf.get_new_instance()
+        emf = ElfiModelFactory(self.model)
+        elfimodel = emf.get_new_instance()
         self.bolfi_params = bolfi_params
-        bf = BolfiFactory(itask, self.bolfi_params)
+        bf = BolfiFactory(elfimodel, self.bolfi_params)
         bolfi = bf.get_new_instance()
         phase1 = ComputeBolfiPosterior(parents = [],
-                                       bolfi = bolfi)
+                                       bolfi = bolfi,
+                                       n_samples = bolfi_params.n_BO_samples) # TODO
         self.add_phase(phase1)
 
         error_measures = []
@@ -416,7 +419,7 @@ class InferenceExperiment(Experiment):
                                             inference_type=self.bolfi_params.inference_type))
             elif issubclass(klass, DiscrepancyError):
                 error_measures.append(klass(model=model,
-                                            itask=itask,
+                                            elfimodel=elfimodel,
                                             client=self.bolfi_params.client,
                                             inference_type=self.bolfi_params.inference_type))
             else:
