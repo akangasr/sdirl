@@ -1,4 +1,5 @@
 import numpy as np
+import sys
 import time
 from enum import IntEnum
 from collections import deque
@@ -17,19 +18,62 @@ class Tag(IntEnum):
     READY = 3  # Returned ready task object
     END   = 4  # Worker will next terminate
 
+def mpi_main(master_main, *args, **kwargs):
+    """ Every process should start by calling this function.
 
-def mpi_setup():
-    comm = MPI.COMM_WORLD
-    rank = comm.Get_rank()
-    size = comm.Get_size()
-    status = MPI.Status()
-    dummy = np.zeros(1)
-    if rank == 0:
-        logger.info("MPI SETUP FOR MASTER")
-        client = MPIClient(comm, size, status, dummy)
-        set_client(client)
-        return client
-    logger.info("MPI SETUP FOR WORKER {}".format(rank))
+    For Master:
+    - Sets MPIClient as default for ELFI
+    - Runs master_main(*args, **kwargs)
+    - Terminates workers
+
+    For Workers:
+    - Starts worker busy loop
+
+    Parameters
+    ----------
+    master_main : callable(*args, **kwargs)
+        The main function of the master process
+    """
+    try:
+        comm = MPI.COMM_WORLD
+        rank = comm.Get_rank()
+        size = comm.Get_size()
+        status = MPI.Status()
+    except Exception as e:
+        logger.critical("MPI initialization error!")
+        tb = traceback.format_exc()
+        logger.critical(tb)
+        sys.exit()
+
+    try:
+        dummy = np.zeros(1)
+        if rank == 0:
+            client = MPIClient(comm, size, status, dummy)
+            set_client(client)
+            master_main(*args, **kwargs)
+            client.end()
+        else:
+            _worker_loop(comm, rank, size, status, dummy)
+    except WorkerFinishedException as e:
+        pass
+    except:
+        tb = traceback.format_exc()
+        logger.critical(tb)
+        comm.Abort()
+        sys.exit()
+
+
+class WorkerFinishedException(Exception):
+    def __init__(self, worker_id):
+        self.worker_id = worker_id
+
+    def __str__(self):
+        return "Worker {} finished".format(self.worker_id)
+
+
+def _worker_loop(comm, rank, size, status, dummy):
+    """ MPI worker busy loop """
+    logger.info("MPI WORKER {}: Setup done".format(rank))
     while True:
         logger.info("MPI WORKER {}: Free..".format(rank))
         comm.Send(dummy, dest=0, tag=Tag.FREE)
@@ -42,12 +86,11 @@ def mpi_setup():
             task.run()
             comm.send(task, dest=0, tag=Tag.READY)
         elif tag == Tag.END:
-            logger.info("MPI WORKER {}: Terminating.".format(rank))
             break
         else:
             logger.info("MPI WORKER {}: Received unexpected command: '{}'!".format(rank, tag))
-    comm.Abort()
-    assert False
+    logger.info("MPI WORKER {}: Terminating.".format(rank))
+    raise WorkerFinishedException(rank)
 
 
 class MPITask():
@@ -74,6 +117,18 @@ class MPITask():
 
 
 class MPIClient(ClientBase):
+    """ Client for parallelizing ELFI computation over MPI.
+        Requires proper setup of the MPI environment.
+
+        Parameters
+        ----------
+        comm : MPI communicator object
+        size : size of MPI process group
+        status : MPI status object
+        dummy : data to use as dummy message payload
+        wait_delay: polling time when waiting for tasks to complete (in seconds)
+    """
+    # TODO: should ready_tasks be emptied at some point?
 
     def __init__(self, comm, size, status, dummy, wait_delay=2.0):
         self.comm = comm
@@ -82,27 +137,31 @@ class MPIClient(ClientBase):
         self.dummy = dummy
         self.wait_delay = wait_delay
         self.waiting_tasks = deque()
-        self.pending_tasks = {} # worker : task
-        self.ready_tasks = {} # idx : task
+        self.pending_tasks = {}  # {worker (int) : task (obj)}
+        self.ready_tasks = {}  # {idx (int) : task (obj)}
         self._idx = itertools.count()
         self.pool = set()
         self._find_workers()
         logger.info("MPI MASTER: Setup done")
 
     def end(self):
+        """ instruct workers to terminate """
         logger.info("MPI MASTER: Terminating workers")
         for j in range(1,self.size):
             self.comm.Send(self.dummy, dest=j, tag=Tag.END)
 
     @property
     def num_cores(self):
-        return self.size - 1
+        """ number of MPI workers """
+        return self.size
 
     @property
     def is_full(self):
+        """ false if there are less tasks than workers """
         return len(self.pending_tasks) + len(self.waiting_tasks) >= self.num_cores
 
     def _run_tasks(self):
+        """ distribute tasks (FIFO order) to free workers """
         self._find_workers()
         while len(self.pool) > 0 and len(self.waiting_tasks) > 0:
             worker = self.pool.pop()
@@ -113,6 +172,7 @@ class MPIClient(ClientBase):
             self.pending_tasks[worker] = task
 
     def _wait_for_next_ready(self):
+        """ wait until next pending task completes """
         self._run_tasks()
         while len(self.pending_tasks) > 0:
             if self.comm.Iprobe(source=MPI.ANY_SOURCE, tag=Tag.READY, status=self.status):
@@ -121,13 +181,13 @@ class MPIClient(ClientBase):
                 task = self.comm.recv(None, source=worker, tag=Tag.READY)
                 logger.info("MPI MASTER: Received task {} from worker {}".format(task.idx, worker))
                 self.ready_tasks[task.idx] = task
-                logger.info("MPI MASTER: Ready {}".format(self.ready_tasks))
                 self._run_tasks()
                 break
             time.sleep(self.wait_delay)
-            logger.info("MPI MASTER: Waiting for a task to complete")
+            logger.info("MPI MASTER: Waiting for any task to complete")
 
     def _find_workers(self):
+        """ gather free workers to pool """
         while self.comm.Iprobe(source=MPI.ANY_SOURCE, tag=Tag.FREE, status=self.status):
             worker = self.status.Get_source()
             self.pool.add(worker)
@@ -139,8 +199,8 @@ class MPIClient(ClientBase):
         idx = self._idx.__next__()
         task = MPITask(idx, kallable, args, kwargs)
         self.waiting_tasks.append(task)
+        logger.info("MPI MASTER: Added task {} to waitlist".format(idx))
         self._run_tasks()
-        logger.info("MPI MASTER: Add task {} to waitlist".format(idx))
         return idx
 
     def apply_sync(self, kallable, *args, **kwargs):
@@ -155,7 +215,7 @@ class MPIClient(ClientBase):
 
     def wait_next(self, idx_list):
         """ wait until one job in list finishes, return index and result """
-        logger.info("MPI MASTER: Waiting for a task in {}".format(idx_list))
+        logger.info("MPI MASTER: Waiting for any task in {}".format(idx_list))
         # TODO: may get into deadlock with badly chosen idx_list
         while True:
             for idx in idx_list:
@@ -169,6 +229,7 @@ class MPIClient(ClientBase):
 
     def remove_task(self, idx):
         """ removes task from waiting tasks (no effect to running or ready tasks) """
+        # TODO: should effect running and ready as well?
         for i in range(len(self.waiting_tasks)):
             if self.waiting_tasks[i].idx == idx:
                 del self.waiting_tasks[i]
@@ -177,6 +238,7 @@ class MPIClient(ClientBase):
 
     def reset(self):
         """ clears all waiting and ready tasks (no effect to running tasks) """
+        # TODO: should effect running as well?
         self.waiting_tasks = deque()
         self.ready_tasks = dict()
 

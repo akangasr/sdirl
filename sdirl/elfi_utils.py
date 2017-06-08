@@ -334,5 +334,6 @@ class BolfiFactory():  # TODO: add this to elfi?
                      bounds=self.params.bounds,
                      initial_evidence=1, # TODO
                      update_interval=5, # TODO
-                     batch_size=self.params.batch_size,
+                     batch_size=1,
+                     max_parallel_batches=self.params.batch_size,
                      seed=self.params.seed)

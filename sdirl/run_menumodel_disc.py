@@ -10,7 +10,7 @@ from sdirl.model import *
 from sdirl.menumodel.model import MenuSearchFactory, MenuSearch
 from sdirl.elfi_utils import BolfiParams
 from sdirl.rl.simulator import RLParams
-from sdirl.mpi import mpi_setup
+from sdirl.mpi import mpi_main
 
 import logging
 logger = logging.getLogger(__name__)
@@ -131,15 +131,5 @@ def run_experiment():
     run_inference_experiment(parameters, bolfi_params, model, ground_truth)
 
 if __name__ == "__main__":
-    try:
-        client = mpi_setup()
-        run_experiment()
-        client.end()
-    except:
-        tb = traceback.format_exc()
-        logger.critical(tb)
-        client.comm.Abort()
-        logger.critical("Aborted.")
-        sys.exit()
-        assert False
+    mpi_main(run_experiment)
 
