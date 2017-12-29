@@ -15,13 +15,13 @@ logger = logging.getLogger(__name__)
 
 def get_model(parameters, ground_truth=None, observation=None, reward_type="utility"):
     rl_params = RLParams(
-                 n_training_episodes=5000000,
+                 n_training_episodes=1000000,
                  n_episodes_per_epoch=10000,
                  n_simulation_episodes=18000,
                  q_alpha=1.0,
                  q_w=0.99,
                  q_gamma=1.0,
-                 exp_epsilon=0.3,
+                 exp_epsilon=1.0,
                  exp_decay=1.0,
                  soft_q=False,
                  soft_temp=0.005)
@@ -45,17 +45,17 @@ def get_bolfi_params(parameters):
     params = BolfiParams()
     params.bounds = tuple([p.bounds for p in parameters])
     params.sync = True
-    params.n_surrogate_samples = 400
-    params.batch_size = 50
-    params.noise_var = 0.5
-    params.kernel_var = 2.00  # 50% of emp.max
+    params.n_surrogate_samples = 100
+    params.batch_size = 10
+    params.noise_var = 0.0
+    params.kernel_var = 10.0  # 50% of emp.max
     params.kernel_scale = 0.1  # 20% of smallest bounds
     params.kernel_class = GPy.kern.RBF
     params.gp_params_optimizer = "scg"
-    params.gp_params_max_opt_iters = 100
+    params.gp_params_max_opt_iters = 1000
     params.exploration_rate = 1.0
     params.acq_opt_iterations = 1000
-    params.batches_of_init_samples = 8  # 50%
+    params.batches_of_init_samples = 5  # 50%
     params.inference_type = InferenceType.ML
     params.use_store = False  # because of discerror measure
     return params
@@ -83,31 +83,18 @@ if __name__ == "__main__":
     env = Environment(sys.argv)
 
     inf_p = [
-            "alpha",  # 0.90, 1.0, 0.49, 0.35
-            #"beta",
-            "uti_scale",
+            #"alpha",
             "comp_err",
-            "calc_sigma",  # 0.3, 2.1, 0.79, 0.93
-            #"tau_p",
-            #"tau_v",
-            #"tau_u",
-            #"step_penalty",
-            #"RL_soft_temp_exp",
+            "calc_sigma",
             ]
-    #reward_type = "utility"
-    #reward_type = "regret"
-    reward_type = "improvement"
 
-    vals = [("alpha", 0.9, 0.3, 1.3, "uniform", 0.3, 1.0),  # 1.5
-            ("beta", 2.0, 0.5, 4, "uniform", 0.5, 3.5),  # 2.0
-            ("uti_scale", 1, 0.5, 5, "uniform", 0.5, 4.5),  # 1.0
-            ("comp_err", 0.1, 0.0, 0.3, "uniform", 0.0, 0.3),  # 1.0
-            ("calc_sigma", 1.2, 0, 3, "uniform", 0.0, 3.0),  # 0.35
+    vals = [("alpha", 1.5, 0.5, 2.0, "uniform", 0.5, 1.5),  # 1.5
+            ("uti_scale", 1.0, 0.1, 5, "uniform", 0.1, 4.9),  # 1.0
+            ("comp_err", 0.1, 0.0, 0.5, "uniform", 0.0, 0.5),  # 1.0
+            ("calc_sigma", 0.35, 0.0, 1.0, "uniform", 0.0, 1.0),  # 0.35
             ("tau_p", 0.011, 0.0, 0.2, "uniform", 0.0, 0.2),  # 0.011
             ("tau_v", 1.1, 0.0, 5.0, "uniform", 0.0, 5.0),  # 1.1
-            ("tau_u", 2.0, 0, 5, "uniform", 0, 5),  # 2.0
-            ("step_penalty", -1.0, -2.0, 0.0, "uniform", -2.0, 2.0),  # -0.2
-            ("RL_soft_temp_exp", -3.0, -6.0, -2.0, "uniform", -6.0, 4.0)]  # 0.1
+            ("step_penalty", -1.0, -2.0, 0.0, "uniform", -2.0, 2.0)]  # -0.2
     parameters = list()
     inf_parameters = list()
     for i in range(len(vals)):
@@ -133,5 +120,5 @@ if __name__ == "__main__":
     #ground_truth = [0.5]
     observation = ChoiceModel.get_observation_dataset()
 
-    model = get_model(parameters, ground_truth=ground_truth, observation=observation, reward_type=reward_type)
+    model = get_model(parameters, ground_truth=ground_truth, observation=observation)
     run_inference_experiment(parameters, bolfi_params, model, ground_truth)

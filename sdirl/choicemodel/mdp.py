@@ -115,7 +115,6 @@ class ChoiceEnvironment(ParametricLoggingEnvironment):
         self.v_loc = v_loc
         self.v_scale = v_scale
         self.v_df = v_df
-        self.reward_type = reward_type
         self.n_training_sets = n_training_sets
         assert self.n_options == 3
 
@@ -147,30 +146,15 @@ class ChoiceEnvironment(ParametricLoggingEnvironment):
                 }
 
     def draw_option_value(self, index):
-        return self.estimate_value(self.options[index], precise=True)
+        return self.options[index].expected_value()
 
-    def utility_function(self, prob, value, baseline=None):
-        if baseline is None:
-            if self.reward_type == "utility":
-                baseline = 0.0
-            elif self.reward_type == "regret":
-                baseline = self.max_value
-            elif self.reward_type == "improvement":
-                baseline = self.mean_value
-            else:
-                assert False
-        value = value - baseline
-        if value > 0:
-            return prob * np.power(value, self.v["alpha"])
-        elif value < 0:
-            return -self.v["beta"] * prob * np.power(abs(value), self.v["alpha"])
-        return 0.0
+    def utility_function(self, option):
+        return np.power(option.p, self.v["alpha"]) * option.v
 
     def estimate_value(self, option, precise=False):
-        r = self.utility_function(option.p, option.v) + self.utility_function(1.0 - option.p, 0)
-        if not precise and self.v["calc_sigma"] > 0:
-            r += self.random_state.normal(0, self.v["calc_sigma"])
-        return r
+        if not precise:
+            return float(self.random_state.normal(self.utility_function(option), self.v["calc_sigma"]))
+        return self.utility_function(option)
 
     def _get_options(self):
         if self.training is False:
@@ -187,13 +171,24 @@ class ChoiceEnvironment(ParametricLoggingEnvironment):
             idx = self.random_state.randint(self.n_training_sets)
             return self.training_sets[idx], "T", "T", "T"
         options = list()
+        umin = min(self.utility_function(Option(0.78, 10)),
+                   self.utility_function(Option(0.25, 30))) - self.v["calc_sigma"]*3
+        umax = min(self.utility_function(Option(0.83, 12)),
+                   self.utility_function(Option(0.30, 33))) + self.v["calc_sigma"]*3
         for i in range(self.n_options):
-            #p = self.random_state.beta(self.p_alpha, self.p_beta)
-            #v = max(0.0, self.random_state.standard_t(self.v_df) * self.v_scale + self.v_loc)
+            while True:
+                p = self.random_state.beta(self.p_alpha, self.p_beta)
+                v = max(0.0, self.random_state.standard_t(self.v_df) * self.v_scale + self.v_loc)
+                opt = Option(p, v)
+                u = self.utility_function(opt)
+                if u > umin and u < umax:
+                    # this sample would probably not affect end results measured with wedell set
+                    # as the absolute value of the estimated utility is a state variable
+                    break
             # omit correlation r for now
-            p = self.random_state.uniform(0.1, 0.9)
-            v = self.random_state.uniform(5, 40)
-            options.append(Option(p, v))
+            #p = self.random_state.uniform(0.1, 0.9)
+            #v = self.random_state.uniform(5, 40)
+            options.append(opt)
         self.training_sets.append(options)
         return options, "T", "T", "T"
 
@@ -228,12 +223,9 @@ class ChoiceEnvironment(ParametricLoggingEnvironment):
     def reset(self):
         # state hidden from agent
         self.options, self.pair_index, self.decoy_target, self.decoy_type = self._get_options()
-        values = [option.v for option in self.options]
-        self.max_value = max(values)
-        self.mean_value = float(np.mean(values))
 
         # state observed by agent
-        self.state = State([-9999]*3, [-9999]*9, -1)
+        self.state = State([-9999]*3, [-9999]*6, -1)
         self.prev_state = self.state.copy()
 
         # misc environment state variables
@@ -246,9 +238,6 @@ class ChoiceEnvironment(ParametricLoggingEnvironment):
         u1 = self.estimate_value(self.options[0])
         u2 = self.estimate_value(self.options[1])
         u3 = self.estimate_value(self.options[2])
-        u1p = self.estimate_value(self.options[0], precise=True)
-        u2p = self.estimate_value(self.options[1], precise=True)
-        u3p = self.estimate_value(self.options[2], precise=True)
 
         self.state.option_values[0] = int(u1 * self.v["uti_scale"])
         self.state.option_values[1] = int(u2 * self.v["uti_scale"])
@@ -259,9 +248,6 @@ class ChoiceEnvironment(ParametricLoggingEnvironment):
         self.state.option_comparisons[3] = self._compare(self.options[0].v, self.options[1].v, self.v["tau_v"])
         self.state.option_comparisons[4] = self._compare(self.options[0].v, self.options[2].v, self.v["tau_v"])
         self.state.option_comparisons[5] = self._compare(self.options[1].v, self.options[2].v, self.v["tau_v"])
-        self.state.option_comparisons[6] = self._compare(u1p, u2p, self.v["tau_u"])
-        self.state.option_comparisons[7] = self._compare(u1p, u3p, self.v["tau_u"])
-        self.state.option_comparisons[8] = self._compare(u2p, u3p, self.v["tau_u"])
 
 
     def performAction(self, action):

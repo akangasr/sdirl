@@ -146,7 +146,7 @@ class ChoiceModel(SDIRLModel):
                 "D": 0,
                 "X": 0
                 }
-        durations = list()
+        #durations = list()
         n = 0
         for index in range(10):  # assume wedell pairs
             context_A = list()
@@ -159,7 +159,7 @@ class ChoiceModel(SDIRLModel):
                         context_B.append(o.last_action)
                     else:
                         assert False
-                    durations.append(o.duration)
+                    #durations.append(o.duration)
             assert len(context_A) > 0
             assert len(context_A) == len(context_B)
             # if more than one pair, match in order of execution
@@ -180,16 +180,22 @@ class ChoiceModel(SDIRLModel):
                 n += 1
         for k, v in table.items():
             table[k] = v * 100 / float(n)
-        print("sim", decoy_type, table, np.mean(durations))
+        print("sim", decoy_type, table) #, np.mean(durations))
         return table
 
     def _table_discrepancy(self, table1, table2):
         s1 = float(sum([v for v in table1.values()]))
         s2 = float(sum([v for v in table2.values()]))
-        d = 0.0
-        for k in table1.keys():
-            d += (100*(table1[k] / s1) - 100*(table2[k] / s2)) ** 2
-        return d / len(table1.keys()) / 1000
+        rev1 = 100*(table1["AB"] / s1)
+        rev2 = 100*(table2["AB"] / s2)
+        irev1 = 100*(table1["BA"] / s1)
+        irev2 = 100*(table2["BA"] / s2)
+        diff1 = rev1 - irev1
+        diff2 = rev2 - irev2
+        dec1 = 100*(table1["D"] / s1)
+        dec2 = 100*(table2["D"] / s2)
+        d = (rev1 - rev2) ** 2 + (irev1 - irev2) ** 2 + (dec1 - dec2) ** 2 + (diff1 - diff2) ** 2
+        return np.sqrt(d / 4.0)  # RMSE
 
     def plot_obs(self, obs):
         obs = self.summary_function([obs])
