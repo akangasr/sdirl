@@ -1,4 +1,2 @@
 # sdirl
-SDIRL
-
-Install: pip install -e .
+Old deprecated experiment scripts
